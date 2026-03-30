@@ -9,76 +9,69 @@
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <style>
         body { font-family: sans-serif; background-color: #0f172a; color: #f1f5f9; -webkit-tap-highlight-color: transparent; }
-        .asu-card { background: #1e293b; border: 1px solid #334155; }
+        .asu-card { background: #1e293b; border: 1px solid #334155; border-radius: 2rem; padding: 1.25rem; transition: all 0.2s; }
+        .asu-card:active { transform: scale(0.98); }
         input::-webkit-inner-spin-button { display: none; }
     </style>
 </head>
-<body class="pb-20">
+<body class="pb-24">
 
-    <header class="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-orange-500 p-4 shadow-xl">
-        <div class="flex justify-between items-center max-w-lg mx-auto">
-            <h1 class="text-2xl font-black italic uppercase tracking-tighter">ASU <span class="text-orange-500">estoques</span></h1>
-            <button onclick="document.getElementById('modal-add').classList.remove('hidden')" class="bg-orange-600 p-3 rounded-xl active:scale-90 transition-all">
-                <i data-lucide="plus"></i>
-            </button>
-        </div>
+    <header class="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-orange-500 p-4 shadow-xl flex justify-between items-center">
+        <h1 class="text-2xl font-black italic uppercase tracking-tighter text-white">ASU <span class="text-orange-500">estoques</span></h1>
+        <button onclick="document.getElementById('modal-add').classList.remove('hidden')" class="bg-orange-600 p-3 rounded-xl active:scale-90 transition-all shadow-lg shadow-orange-900/20">
+            <i data-lucide="plus"></i>
+        </button>
     </header>
 
-    <main class="p-4 max-w-lg mx-auto space-y-4">
-        <input type="text" id="search" oninput="render()" placeholder="Buscar insumo..." class="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 outline-none focus:border-orange-500 text-lg">
+    <main class="p-4 max-w-lg mx-auto space-y-4 text-center">
+        <div id="status-cloud" class="text-[10px] font-bold uppercase text-slate-500 italic">Iniciando sistema...</div>
+        
+        <input type="text" id="search" oninput="render()" placeholder="Buscar no estoque..." 
+            class="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 outline-none focus:border-orange-500 text-white shadow-inner mb-4">
+
         <div id="grid" class="space-y-3">
-            <p id="loading-msg" class="text-slate-500 text-center py-10 animate-pulse uppercase text-[10px] font-bold">Sincronizando com ASU Cloud...</p>
-        </div>
+            </div>
     </main>
 
-    <div id="modal-trans" class="hidden fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm">
-        <div class="bg-slate-800 w-full max-w-md p-8 rounded-t-[2.5rem] sm:rounded-[2.5rem] border-t border-slate-700">
-            <h2 id="trans-title" class="text-2xl font-black mb-1 italic uppercase">Operação</h2>
-            <p id="trans-item-nome" class="text-orange-500 font-bold uppercase text-[10px] mb-6 tracking-widest"></p>
+    <div id="modal-add" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+        <div class="bg-slate-800 w-full max-w-md p-8 rounded-[2rem] border border-slate-700 shadow-2xl">
+            <h2 class="text-xl font-black mb-6 italic uppercase text-white tracking-widest">Cadastrar Insumo</h2>
             <div class="space-y-4">
-                <input type="number" id="trans-qtd" placeholder="Quantidade" class="w-full bg-slate-900 p-5 rounded-2xl border border-slate-700 text-3xl font-black text-center text-white outline-none">
-                <input type="text" id="trans-user" placeholder="Seu nome" class="w-full bg-slate-900 p-4 rounded-2xl border border-slate-700 text-white outline-none">
-            </div>
-            <div class="flex gap-3 mt-8">
-                <button onclick="document.getElementById('modal-trans').classList.add('hidden')" class="flex-1 py-4 font-bold text-slate-500">Voltar</button>
-                <button id="btn-confirm" class="flex-1 py-4 bg-orange-600 rounded-2xl font-bold text-white shadow-lg active:scale-95">Confirmar</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="modal-add" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90">
-        <div class="bg-slate-800 w-full max-w-md p-8 rounded-[2.5rem] border border-slate-700">
-            <h2 class="text-xl font-black mb-6 italic uppercase">Novo Insumo</h2>
-            <div class="space-y-4">
-                <input type="text" id="add-nome" placeholder="Nome" class="w-full bg-slate-900 p-4 rounded-xl border border-slate-700 text-white outline-none">
+                <input type="text" id="add-nome" placeholder="Nome do Item" class="w-full bg-slate-900 p-4 rounded-xl border border-slate-700 text-white outline-none">
                 <div class="flex gap-2">
-                    <input type="number" id="add-qtd" placeholder="Qtd" class="w-1/2 bg-slate-900 p-4 rounded-xl border border-slate-700 text-white">
-                    <select id="add-unidade" class="w-1/2 bg-slate-900 p-4 rounded-xl border border-slate-700 text-white">
+                    <input type="number" id="add-qtd" placeholder="Qtd Inicial" class="w-1/2 bg-slate-900 p-4 rounded-xl border border-slate-700 text-white outline-none">
+                    <select id="add-unidade" class="w-1/2 bg-slate-900 p-4 rounded-xl border border-slate-700 text-white outline-none font-bold">
                         <option value="kg">kg</option><option value="un">un</option><option value="L">L</option><option value="g">g</option>
                     </select>
                 </div>
             </div>
             <div class="flex gap-4 mt-8">
-                <button onclick="document.getElementById('modal-add').classList.add('hidden')" class="flex-1 text-slate-500">Cancelar</button>
-                <button onclick="addItem()" class="flex-1 py-4 bg-orange-600 rounded-xl font-bold">Salvar</button>
+                <button onclick="document.getElementById('modal-add').classList.add('hidden')" class="flex-1 font-bold text-slate-500 uppercase text-xs">Cancelar</button>
+                <button onclick="addItem()" class="flex-1 py-4 bg-orange-600 rounded-xl font-bold text-white uppercase text-xs shadow-lg">Salvar</button>
             </div>
         </div>
     </div>
 
     <script>
+        // CONFIGURAÇÃO OFICIAL ASU
         const SUPABASE_URL = 'https://fzdwzmaqhttlljobjpky.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6ZHd6bWFxaHR0bGxqb2JqcGt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MDM1MDgsImV4cCI6MjA5MDQ3OTUwOH0.OnE6ZwUSjSdw8G0BrB7G6sabhTHVZ7-E5Fx_UB4gXSc';
+        
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         let estoqueLocal = [];
 
         async function carregarDados() {
+            const status = document.getElementById('status-cloud');
             const { data, error } = await supabaseClient.from('estoque_asu').select('*').order('nome');
+            
             if (error) {
+                status.innerHTML = '<span class="text-red-500 italic">Erro: Verifique o RLS no Supabase</span>';
                 console.error(error);
-                document.getElementById('loading-msg').innerText = "Erro: Verifique se a tabela 'estoque_asu' existe e se o RLS está desativado.";
                 return;
             }
+            
             estoqueLocal = data;
+            status.innerHTML = '<span class="text-green-500 italic">● ASU Cloud Online</span>';
             render();
         }
 
@@ -87,54 +80,61 @@
             const qtd = parseFloat(document.getElementById('add-qtd').value);
             const unidade = document.getElementById('add-unidade').value;
             if(!nome || isNaN(qtd)) return;
-            await supabaseClient.from('estoque_asu').insert([{ nome, qtd, unidade, min: 2, last_log: 'Cadastro' }]);
-            document.getElementById('modal-add').classList.add('hidden');
-            carregarDados();
+
+            const { error } = await supabaseClient.from('estoque_asu').insert([{ nome, qtd, unidade, min: 2, last_log: 'Cadastro Inicial' }]);
+            if (error) {
+                alert("Erro ao salvar! Verifique se o RLS está desabilitado no Supabase.");
+            } else {
+                document.getElementById('modal-add').classList.add('hidden');
+                document.getElementById('add-nome').value = '';
+                document.getElementById('add-qtd').value = '';
+                carregarDados();
+            }
         }
 
-        function abrirTransacao(id, multiplicador) {
-            const item = estoqueLocal.find(i => i.id === id);
-            document.getElementById('trans-title').innerText = multiplicador > 0 ? "Abastecer" : "Retirar";
-            document.getElementById('trans-item-nome').innerText = item.nome;
-            document.getElementById('modal-trans').classList.remove('hidden');
-            document.getElementById('btn-confirm').onclick = async () => {
-                const valor = parseFloat(document.getElementById('trans-qtd').value);
-                const user = document.getElementById('trans-user').value;
-                if(!valor || !user) return;
-                const novaQtd = Math.max(0, parseFloat((item.qtd + (valor * multiplicador)).toFixed(2)));
-                const log = `${user} ${multiplicador > 0 ? 'adicionou' : 'retirou'} ${valor}${item.unidade}`;
-                await supabaseClient.from('estoque_asu').update({ qtd: novaQtd, last_log: log }).eq('id', id);
-                document.getElementById('modal-trans').classList.add('hidden');
-                carregarDados();
-            };
+        async function alterar(id, nome, qtdAtual, valor, uni) {
+            const quem = prompt(`Operação em ${nome}. Quem está retirando/adicionando?`);
+            if(!quem) return;
+            
+            const novaQtd = Math.max(0, parseFloat((qtdAtual + valor).toFixed(2)));
+            const log = `${quem} mexeu ${valor}${uni}`;
+
+            const { error } = await supabaseClient.from('estoque_asu').update({ qtd: novaQtd, last_log: log }).eq('id', id);
+            if(error) alert("Erro ao atualizar!");
+            carregarDados();
         }
 
         function render() {
             const grid = document.getElementById('grid');
             const busca = document.getElementById('search').value.toLowerCase();
             grid.innerHTML = '';
-            estoqueLocal.filter(i => i.nome.toLowerCase().includes(busca)).forEach(item => {
+
+            const filtrados = estoqueLocal.filter(i => i.nome.toLowerCase().includes(busca));
+
+            if(filtrados.length === 0) {
+                grid.innerHTML = '<p class="py-10 text-slate-600 text-[10px] font-black uppercase italic">Nenhum item encontrado.</p>';
+            }
+
+            filtrados.forEach(item => {
                 const critico = item.qtd <= item.min;
                 grid.innerHTML += `
-                    <div class="asu-card p-5 rounded-[2rem] shadow-lg border ${critico ? 'border-red-500/50 bg-red-900/10' : 'border-slate-700'}">
-                        <div class="flex justify-between items-center">
-                            <div class="text-left">
-                                <p class="text-[9px] font-black text-slate-500 uppercase">${item.nome}</p>
-                                <p class="text-4xl font-black text-white">${item.qtd}<span class="text-xs font-bold text-orange-500 ml-1 italic">${item.unidade}</span></p>
-                            </div>
-                            <div class="flex gap-2">
-                                <button onclick="abrirTransacao(${item.id}, -1)" class="w-14 h-14 bg-slate-700 rounded-2xl font-bold text-2xl">-</button>
-                                <button onclick="abrirTransacao(${item.id}, 1)" class="w-14 h-14 bg-orange-600 rounded-2xl font-bold text-2xl">+</button>
-                            </div>
+                    <div class="asu-card flex justify-between items-center ${critico ? 'border-red-500/50 bg-red-900/10' : ''}">
+                        <div class="text-left overflow-hidden">
+                            <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest truncate">${item.nome}</p>
+                            <p class="text-4xl font-black text-white">${item.qtd}<span class="text-xs text-orange-500 ml-1 italic font-black uppercase">${item.unidade}</span></p>
+                            <p class="text-[8px] text-slate-600 uppercase mt-1 truncate italic">${item.last_log || ''}</p>
                         </div>
-                        <p class="text-[9px] text-slate-500 mt-4 border-t border-slate-700/50 pt-2 italic">${item.last_log || ''}</p>
+                        <div class="flex gap-2">
+                            <button onclick="alterar(${item.id},'${item.nome}',${item.qtd},-1,'${item.unidade}')" class="w-12 h-12 bg-slate-700 rounded-xl font-bold text-xl shadow-lg active:bg-slate-600">-</button>
+                            <button onclick="alterar(${item.id},'${item.nome}',${item.qtd},1,'${item.unidade}')" class="w-12 h-12 bg-orange-600 rounded-xl font-bold text-xl shadow-lg active:bg-orange-500">+</button>
+                        </div>
                     </div>`;
             });
             lucide.createIcons();
         }
 
         carregarDados();
-        setInterval(carregarDados, 5000);
+        setInterval(carregarDados, 5000); // Atualiza a cada 5 segundos para todos
     </script>
 </body>
 </html>
