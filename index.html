@@ -6,9 +6,7 @@
     <title>ASU estoques | Central</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    
     <script src="https://unpkg.com/lucide@latest"></script>
-    
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     
     <style>
@@ -16,7 +14,7 @@
         .asu-card { background: #1e293b; border: 1px solid #334155; border-radius: 2rem; padding: 1.5rem; transition: all 0.2s; }
         input::-webkit-inner-spin-button { display: none; }
         
-        /* Efeito de contorno branco para 'estoques' */
+        /* Contorno branco perfeito para a palavra 'estoque' em preto */
         .outline-text {
             color: black;
             text-shadow:
@@ -29,60 +27,56 @@
 </head>
 <body class="pb-24">
 
-    <header class="sticky top-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-orange-500 p-4 shadow-xl">
+    <header class="sticky top-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-slate-700 p-4 shadow-xl">
         <div class="max-w-lg mx-auto flex justify-center items-center relative">
             <h1 class="text-2xl font-black italic uppercase tracking-tighter text-white text-center">
                 ASU <span class="outline-text">estoques</span>
             </h1>
-            <button onclick="document.getElementById('modal-add').classList.remove('hidden')" class="absolute right-0 bg-orange-600 p-2 rounded-xl shadow-lg active:scale-90 transition-all">
+            <button onclick="document.getElementById('modal-add').classList.remove('hidden')" class="absolute right-0 bg-slate-700 p-2 rounded-xl shadow-lg active:scale-90 transition-all border border-slate-600">
                 <i data-lucide="plus" class="text-white w-6 h-6"></i>
             </button>
         </div>
     </header>
 
     <main class="p-4 max-w-lg mx-auto space-y-4">
-        <div id="status-cloud" class="text-[10px] font-black uppercase text-center text-slate-500 italic">Sincronizando...</div>
-        <input type="text" id="search" oninput="renderStockItems()" placeholder="Buscar item..." class="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 outline-none focus:border-orange-500 text-white">
+        <div id="status-cloud" class="text-[10px] font-black uppercase text-center text-slate-500 italic">Conectando...</div>
+        <input type="text" id="search" oninput="renderStockItems()" placeholder="Buscar item..." class="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 outline-none focus:border-slate-500 text-white">
         <div id="grid" class="space-y-3"></div>
     </main>
 
     <div id="modal-add" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-        <div class="bg-slate-800 w-full max-w-md p-8 rounded-[2.5rem] border border-slate-700">
+        <div class="bg-slate-800 w-full max-w-md p-8 rounded-[2.5rem] border border-slate-700 shadow-2xl">
             <h2 class="text-xl font-black mb-6 italic uppercase text-white text-center">Novo Insumo</h2>
             <div class="space-y-4">
-                <input type="text" id="add-nome" placeholder="Nome" class="w-full bg-slate-900 p-4 rounded-xl border border-slate-700 text-white outline-none">
+                <input type="text" id="add-nome" placeholder="Nome do item" class="w-full bg-slate-900 p-4 rounded-xl border border-slate-700 text-white outline-none">
                 <div class="flex gap-2">
-                    <input type="number" id="add-qtd" placeholder="Qtd" class="w-1/2 bg-slate-900 p-4 rounded-xl border border-slate-700 text-white">
-                    <select id="add-unidade" class="w-1/2 bg-slate-900 p-4 rounded-xl border border-slate-700 text-white font-bold uppercase">
+                    <input type="number" id="add-qtd" placeholder="Qtd" class="w-1/2 bg-slate-900 p-4 rounded-xl border border-slate-700 text-white outline-none">
+                    <select id="add-unidade" class="w-1/2 bg-slate-900 p-4 rounded-xl border border-slate-700 text-white font-bold uppercase outline-none">
                         <option value="kg">kg</option><option value="un">un</option><option value="L">L</option><option value="g">g</option>
                     </select>
                 </div>
             </div>
             <div class="flex gap-4 mt-8">
                 <button onclick="document.getElementById('modal-add').classList.add('hidden')" class="flex-1 font-bold text-slate-500 uppercase text-xs">Voltar</button>
-                <button onclick="addNewStockItem()" class="flex-1 py-4 bg-orange-600 rounded-xl font-bold text-white shadow-lg">Cadastrar</button>
+                <button onclick="addNewStockItem()" class="flex-1 py-4 bg-slate-600 rounded-xl font-bold text-white shadow-lg uppercase text-xs">Cadastrar</button>
             </div>
         </div>
     </div>
 
     <script>
-        // --- CONFIGURAÇÃO SUPABASE ---
-        // Você precisará preencher as variáveis abaixo com as credenciais do seu projeto Supabase.
-        const SUPABASE_URL = 'SUA_SUPABASE_URL_AQUI'; // Ex: 'https://seunome.supabase.co'
-        const SUPABASE_KEY = 'SUA_SUPABASE_KEY_AQUI'; // A chave 'anon' ou 'public'
+        // CHAVES INSERIDAS AQUI!
+        const SUPABASE_URL = 'https://fzdwzmaqhttlljobjpky.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6ZHd6bWFxaHR0bGxqb2JqcGt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MDM1MDgsImV4cCI6MjA5MDQ3OTUwOH0.OnE6ZwUSjSdw8G0BrB7G6sabhTHVZ7-E5Fx_UB4gXSc';
 
-        // Inicializa o cliente Supabase
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         let currentStockData = [];
 
-        // 1. CARREGAR DADOS DA TABELA 'asu'
         async function loadStockData() {
             const statusLabel = document.getElementById('status-cloud');
             const { data, error } = await supabaseClient.from('asu').select('*').order('nome');
             
             if (error) {
-                statusLabel.innerHTML = '<span class="text-red-500 font-bold uppercase text-[8px]">Erro: Verifique a conexão ou tabela</span>';
-                console.error("Erro ao carregar dados:", error);
+                statusLabel.innerHTML = '<span class="text-red-500 font-bold uppercase text-[8px]">Aguardando conexão...</span>';
                 return;
             }
             
@@ -91,16 +85,12 @@
             renderStockItems();
         }
 
-        // 2. ADICIONAR ITEM À TABELA 'asu'
         async function addNewStockItem() {
             const inputNome = document.getElementById('add-nome').value;
             const inputQtd = parseFloat(document.getElementById('add-qtd').value);
             const inputUnidade = document.getElementById('add-unidade').value;
             
-            if(!inputNome || isNaN(inputQtd)) {
-                alert("Preencha o nome e a quantidade corretamente.");
-                return;
-            }
+            if(!inputNome || isNaN(inputQtd)) return;
 
             const { error } = await supabaseClient.from('asu').insert([{ 
                 nome: inputNome, 
@@ -110,10 +100,7 @@
                 last_log: 'Cadastro Inicial' 
             }]);
 
-            if (error) {
-                alert("Erro ao salvar no banco. Verifique se o RLS está desativado!");
-                console.error("Erro ao inserir dados:", error);
-            } else {
+            if (!error) {
                 document.getElementById('modal-add').classList.add('hidden');
                 document.getElementById('add-nome').value = '';
                 document.getElementById('add-qtd').value = '';
@@ -121,7 +108,6 @@
             }
         }
 
-        // 3. ATUALIZAR QUANTIDADE (MAIS OU MENOS)
         async function updateStockItemQuantity(id, nome, qtdAtual, valor, uni) {
             const userName = prompt(`Movimentação em: ${nome}. Quem está operando?`);
             if(!userName) return;
@@ -130,31 +116,17 @@
             const actionType = valor > 0 ? "Adicionou" : "Retirou";
             const logEntry = `${userName} ${actionType} ${Math.abs(valor)}${uni}`;
 
-            const { error } = await supabaseClient.from('asu').update({ 
-                qtd: novaQtd, 
-                last_log: logEntry 
-            }).eq('id', id);
-
-            if (error) {
-                alert("Erro ao atualizar estoque!");
-                console.error("Erro na atualização:", error);
-            }
+            await supabaseClient.from('asu').update({ qtd: novaQtd, last_log: logEntry }).eq('id', id);
             loadStockData();
         }
 
-        // 4. EXCLUIR ITEM
         async function deleteStockItem(id) {
             if(confirm("Deseja remover este item permanentemente do ASU?")) {
-                const { error } = await supabaseClient.from('asu').delete().eq('id', id);
-                if (error) {
-                    alert("Erro ao excluir!");
-                    console.error("Erro na exclusão:", error);
-                }
+                await supabaseClient.from('asu').delete().eq('id', id);
                 loadStockData();
             }
         }
 
-        // 5. RENDERIZAR NA TELA (O QUE O USUÁRIO VÊ)
         function renderStockItems() {
             const itemGrid = document.getElementById('grid');
             const searchQuery = document.getElementById('search').value.toLowerCase();
@@ -163,7 +135,7 @@
             const filteredItems = currentStockData.filter(item => item.nome.toLowerCase().includes(searchQuery));
 
             if(filteredItems.length === 0 && searchQuery === '') {
-                itemGrid.innerHTML = '<p class="py-10 text-slate-600 text-[10px] font-black uppercase text-center italic">Aguardando seu primeiro cadastro.</p>';
+                itemGrid.innerHTML = '<p class="py-10 text-slate-500 text-[10px] font-black uppercase text-center italic">Aguardando o primeiro cadastro.</p>';
                 return;
             }
 
@@ -172,31 +144,26 @@
                 itemGrid.innerHTML += `
                     <div class="asu-card flex justify-between items-center mb-3 ${isCriticalLevel ? 'border-red-500/50 bg-red-900/10' : ''}">
                         <div class="text-left overflow-hidden">
-                            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest truncate mb-1">${item.nome}</p>
-                            <p class="text-4xl font-black text-white leading-none">${item.qtd}<span class="text-xs text-orange-500 ml-1 italic font-black uppercase">${item.unidade}</span></p>
+                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate mb-1">${item.nome}</p>
+                            <p class="text-4xl font-black text-white leading-none">${item.qtd}<span class="text-xs text-slate-400 ml-1 italic font-black uppercase">${item.unidade}</span></p>
                             <div class="flex items-center gap-2 mt-2">
                                 <p class="text-[8px] text-slate-500 uppercase truncate italic max-w-[120px]">${item.last_log || 'Sem registros'}</p>
-                                <button onclick="deleteStockItem(${item.id})" class="text-slate-800 hover:text-red-500"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
+                                <button onclick="deleteStockItem(${item.id})" class="text-slate-700 hover:text-red-500"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
                             </div>
                         </div>
                         <div class="flex gap-2">
                             <button onclick="updateStockItemQuantity(${item.id},'${item.nome}',${item.qtd},-1,'${item.unidade}')" class="w-14 h-14 bg-slate-700 rounded-2xl font-bold text-2xl active:bg-slate-600 shadow-lg text-white">-</button>
-                            <button onclick="updateStockItemQuantity(${item.id},'${item.nome}',${item.qtd},1,'${item.unidade}')" class="w-14 h-14 bg-orange-600 rounded-2xl font-bold text-2xl active:bg-orange-500 shadow-lg text-white">+</button>
+                            <button onclick="updateStockItemQuantity(${item.id},'${item.nome}',${item.qtd},1,'${item.unidade}')" class="w-14 h-14 bg-slate-600 rounded-2xl font-bold text-2xl active:bg-slate-500 shadow-lg text-white">+</button>
                         </div>
                     </div>`;
             });
-            // Inicializa os ícones após renderizar
             lucide.createIcons();
         }
 
-        // INICIALIZAÇÃO
         window.onload = () => {
-            // Inicializa ícones do cabeçalho
             lucide.createIcons();
-            // Carrega os dados
             loadStockData();
         };
-        // Atualiza automaticamente a cada 5 segundos para sincronizar todos os celulares
         setInterval(loadStockData, 5000);
     </script>
 </body>
