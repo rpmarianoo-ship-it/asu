@@ -4,34 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ASU estoques | Central</title>
-    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    
     <style>
         body { font-family: sans-serif; background-color: #0f172a; color: #f1f5f9; -webkit-tap-highlight-color: transparent; }
         .asu-card { background: #1e293b; border: 1px solid #334155; border-radius: 2rem; padding: 1.5rem; transition: all 0.2s; }
         input::-webkit-inner-spin-button { display: none; }
-        
         .outline-text {
             color: black;
-            text-shadow:
-                -1px -1px 0 #fff,
-                 1px -1px 0 #fff,
-                -1px  1px 0 #fff,
-                 1px  1px 0 #fff;
+            text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff;
         }
     </style>
 </head>
 <body class="pb-24">
 
-    <header class="sticky top-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-slate-700 p-4 shadow-xl">
+    <header class="sticky top-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-orange-500 p-4 shadow-xl">
         <div class="max-w-lg mx-auto flex justify-center items-center relative">
             <h1 class="text-2xl font-black italic uppercase tracking-tighter text-white text-center">
                 ASU <span class="outline-text">estoques</span>
             </h1>
-            <button onclick="document.getElementById('modal-add').classList.remove('hidden')" class="absolute right-0 bg-slate-700 p-2 rounded-xl shadow-lg active:scale-90 transition-all border border-slate-600">
+            <button onclick="document.getElementById('modal-add').classList.remove('hidden')" class="absolute right-0 bg-orange-600 p-2 rounded-xl shadow-lg active:scale-90 transition-all">
                 <i data-lucide="plus" class="text-white w-6 h-6"></i>
             </button>
         </div>
@@ -39,7 +32,7 @@
 
     <main class="p-4 max-w-lg mx-auto space-y-4">
         <div id="status-cloud" class="text-[10px] font-black uppercase text-center text-slate-500 italic">Conectando...</div>
-        <input type="text" id="search" oninput="renderStockItems()" placeholder="Buscar item..." class="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 outline-none focus:border-slate-500 text-white">
+        <input type="text" id="search" oninput="renderStockItems()" placeholder="Buscar item..." class="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 outline-none focus:border-orange-500 text-white">
         <div id="grid" class="space-y-3"></div>
     </main>
 
@@ -71,11 +64,11 @@
 
         async function loadStockData() {
             const statusLabel = document.getElementById('status-cloud');
-            const { data, error } = await supabaseClient.from('asu').select('*').order('nome');
+            // Mapeado para 'estoque_asu'
+            const { data, error } = await supabaseClient.from('estoque_asu').select('*').order('nome');
             
             if (error) {
-                // AGORA ELE VAI MOSTRAR O ERRO REAL NA TELA
-                statusLabel.innerHTML = `<span class="text-red-500 font-bold uppercase text-[9px]">Erro Supabase: ${error.message}</span>`;
+                statusLabel.innerHTML = `<span class="text-red-500 font-bold uppercase text-[9px]">Erro: ${error.message}</span>`;
                 return;
             }
             
@@ -88,42 +81,35 @@
             const inputNome = document.getElementById('add-nome').value;
             const inputQtd = parseFloat(document.getElementById('add-qtd').value);
             const inputUnidade = document.getElementById('add-unidade').value;
-            
             if(!inputNome || isNaN(inputQtd)) return;
 
-            const { error } = await supabaseClient.from('asu').insert([{ 
-                nome: inputNome, 
-                qtd: inputQtd, 
-                unidade: inputUnidade, 
-                min: 2, 
-                last_log: 'Cadastro Inicial' 
+            const { error } = await supabaseClient.from('estoque_asu').insert([{ 
+                nome: inputNome, qtd: inputQtd, unidade: inputUnidade, min: 2, last_log: 'Cadastro Inicial' 
             }]);
 
-            if (error) {
-                alert("Erro ao inserir: " + error.message);
-            } else {
+            if (!error) {
                 document.getElementById('modal-add').classList.add('hidden');
                 document.getElementById('add-nome').value = '';
                 document.getElementById('add-qtd').value = '';
                 loadStockData();
+            } else {
+                alert("Erro ao cadastrar: " + error.message);
             }
         }
 
         async function updateStockItemQuantity(id, nome, qtdAtual, valor, uni) {
             const userName = prompt(`Movimentação em: ${nome}. Quem está operando?`);
             if(!userName) return;
-
             const novaQtd = Math.max(0, parseFloat((qtdAtual + valor).toFixed(2)));
-            const actionType = valor > 0 ? "Adicionou" : "Retirou";
-            const logEntry = `${userName} ${actionType} ${Math.abs(valor)}${uni}`;
+            const logEntry = `${userName} ${valor > 0 ? 'Adicionou' : 'Retirou'} ${Math.abs(valor)}${uni}`;
 
-            await supabaseClient.from('asu').update({ qtd: novaQtd, last_log: logEntry }).eq('id', id);
+            await supabaseClient.from('estoque_asu').update({ qtd: novaQtd, last_log: logEntry }).eq('id', id);
             loadStockData();
         }
 
         async function deleteStockItem(id) {
-            if(confirm("Deseja remover este item permanentemente do ASU?")) {
-                await supabaseClient.from('asu').delete().eq('id', id);
+            if(confirm("Deseja remover este item permanentemente?")) {
+                await supabaseClient.from('estoque_asu').delete().eq('id', id);
                 loadStockData();
             }
         }
@@ -132,11 +118,10 @@
             const itemGrid = document.getElementById('grid');
             const searchQuery = document.getElementById('search').value.toLowerCase();
             itemGrid.innerHTML = '';
-
             const filteredItems = currentStockData.filter(item => item.nome.toLowerCase().includes(searchQuery));
 
             if(filteredItems.length === 0 && searchQuery === '') {
-                itemGrid.innerHTML = '<p class="py-10 text-slate-500 text-[10px] font-black uppercase text-center italic">Aguardando o primeiro cadastro.</p>';
+                itemGrid.innerHTML = '<p class="py-10 text-slate-500 text-[10px] font-black uppercase text-center italic">Sem itens na tabela estoque_asu.</p>';
                 return;
             }
 
