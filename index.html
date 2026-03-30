@@ -4,11 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ASU estoques | Sistema Central</title>
-    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    
     <style>
         body { font-family: sans-serif; background-color: #0f172a; color: #f1f5f9; -webkit-tap-highlight-color: transparent; }
         .asu-card { background: #1e293b; border: 1px solid #334155; border-radius: 2rem; padding: 1.5rem; transition: all 0.2s; }
@@ -27,12 +25,8 @@
 
     <main class="p-4 max-w-lg mx-auto space-y-4">
         <div id="status-cloud" class="text-[10px] font-black uppercase text-center text-slate-500 italic">Sincronizando com ASU Cloud...</div>
-        
-        <input type="text" id="search" oninput="render()" placeholder="Buscar item no estoque..." 
-            class="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 outline-none focus:border-orange-500 text-white shadow-inner">
-
-        <div id="grid" class="space-y-3">
-            </div>
+        <input type="text" id="search" oninput="render()" placeholder="Buscar item no estoque..." class="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 outline-none focus:border-orange-500 text-white shadow-inner">
+        <div id="grid" class="space-y-3"></div>
     </main>
 
     <div id="modal-add" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
@@ -58,6 +52,99 @@
     </div>
 
     <script>
-        // --- CONFIGURAÇÃO SUPABASE (VERIFICADO LINHA POR LINHA) ---
         const SUPABASE_URL = 'https://fzdwzmaqhttlljobjpky.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6ZHd6bWFxaHR0bGxqb2JqcGt5Iiw
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6ZHd6bWFxaHR0bGxqb2JqcGt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MDM1MDgsImV4cCI6MjA5MDQ3OTUwOH0.OnE6ZwUSjSdw8G0BrB7G6sabhTHVZ7-E5Fx_UB4gXSc';
+        
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        let estoqueLocal = [];
+
+        async function carregarDados() {
+            const status = document.getElementById('status-cloud');
+            const { data, error } = await supabaseClient.from('asu').select('*').order('nome');
+            
+            if (error) {
+                status.innerHTML = '<span class="text-red-500 font-bold uppercase text-[8px]">ERRO: ' + error.message + '</span>';
+                return;
+            }
+            
+            estoqueLocal = data;
+            status.innerHTML = '<span class="text-green-500 italic font-bold tracking-tighter">● ASU Cloud Online</span>';
+            render();
+        }
+
+        async function addItem() {
+            const nome = document.getElementById('add-nome').value;
+            const qtd = parseFloat(document.getElementById('add-qtd').value);
+            const unidade = document.getElementById('add-unidade').value;
+            
+            if(!nome || isNaN(qtd)) return;
+
+            const { error } = await supabaseClient.from('asu').insert([{ nome: nome, qtd: qtd, unidade: unidade, min: 2, last_log: 'Cadastro Inicial' }]);
+
+            if (error) {
+                alert("Erro ao salvar no banco.");
+            } else {
+                document.getElementById('modal-add').classList.add('hidden');
+                document.getElementById('add-nome').value = '';
+                document.getElementById('add-qtd').value = '';
+                carregarDados();
+            }
+        }
+
+        async function alterar(id, nome, qtdAtual, valor, uni) {
+            const quem = prompt('Movimentação em: ' + nome + '. Quem está operando?');
+            if(!quem) return;
+
+            const novaQtd = Math.max(0, parseFloat((qtdAtual + valor).toFixed(2)));
+            const acao = valor > 0 ? "Adicionou" : "Retirou";
+            const log = quem + ' ' + acao + ' ' + Math.abs(valor) + uni;
+
+            await supabaseClient.from('asu').update({ qtd: novaQtd, last_log: log }).eq('id', id);
+            carregarDados();
+        }
+
+        async function excluir(id) {
+            if(confirm("Deseja remover este item permanentemente do ASU?")) {
+                await supabaseClient.from('asu').delete().eq('id', id);
+                carregarDados();
+            }
+        }
+
+        function render() {
+            const grid = document.getElementById('grid');
+            const busca = document.getElementById('search').value.toLowerCase();
+            grid.innerHTML = '';
+
+            const filtrados = estoqueLocal.filter(i => i.nome.toLowerCase().includes(busca));
+
+            if(filtrados.length === 0 && busca === '') {
+                grid.innerHTML = '<p class="py-10 text-slate-600 text-[10px] font-black uppercase text-center italic">Aguardando seu primeiro cadastro.</p>';
+                return;
+            }
+
+            filtrados.forEach(item => {
+                const critico = item.qtd <= item.min;
+                grid.innerHTML += `
+                    <div class="asu-card flex justify-between items-center ${critico ? 'border-red-500/50 bg-red-900/10' : ''}">
+                        <div class="text-left overflow-hidden">
+                            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest truncate mb-1">${item.nome}</p>
+                            <p class="text-4xl font-black text-white leading-none">${item.qtd}<span class="text-xs text-orange-500 ml-1 italic font-black uppercase">${item.unidade}</span></p>
+                            <div class="flex items-center gap-2 mt-2">
+                                <p class="text-[8px] text-slate-500 uppercase truncate italic max-w-[120px]">${item.last_log || 'Sem registros'}</p>
+                                <button onclick="excluir(${item.id})" class="text-slate-800 hover:text-red-500"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="alterar(${item.id},'${item.nome}',${item.qtd},-1,'${item.unidade}')" class="w-14 h-14 bg-slate-700 rounded-2xl font-bold text-2xl active:bg-slate-600 shadow-lg text-white">-</button>
+                            <button onclick="alterar(${item.id},'${item.nome}',${item.qtd},1,'${item.unidade}')" class="w-14 h-14 bg-orange-600 rounded-2xl font-bold text-2xl active:bg-orange-500 shadow-lg text-white">+</button>
+                        </div>
+                    </div>`;
+            });
+            lucide.createIcons();
+        }
+
+        carregarDados();
+        setInterval(carregarDados, 5000);
+    </script>
+</body>
+</html>
