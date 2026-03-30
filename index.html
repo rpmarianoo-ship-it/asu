@@ -14,7 +14,6 @@
         .asu-card { background: #1e293b; border: 1px solid #334155; border-radius: 2rem; padding: 1.5rem; transition: all 0.2s; }
         input::-webkit-inner-spin-button { display: none; }
         
-        /* Contorno branco perfeito para a palavra 'estoque' em preto */
         .outline-text {
             color: black;
             text-shadow:
@@ -64,7 +63,6 @@
     </div>
 
     <script>
-        // CHAVES INSERIDAS AQUI!
         const SUPABASE_URL = 'https://fzdwzmaqhttlljobjpky.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6ZHd6bWFxaHR0bGxqb2JqcGt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MDM1MDgsImV4cCI6MjA5MDQ3OTUwOH0.OnE6ZwUSjSdw8G0BrB7G6sabhTHVZ7-E5Fx_UB4gXSc';
 
@@ -76,7 +74,8 @@
             const { data, error } = await supabaseClient.from('asu').select('*').order('nome');
             
             if (error) {
-                statusLabel.innerHTML = '<span class="text-red-500 font-bold uppercase text-[8px]">Aguardando conexão...</span>';
+                // AGORA ELE VAI MOSTRAR O ERRO REAL NA TELA
+                statusLabel.innerHTML = `<span class="text-red-500 font-bold uppercase text-[9px]">Erro Supabase: ${error.message}</span>`;
                 return;
             }
             
@@ -100,7 +99,9 @@
                 last_log: 'Cadastro Inicial' 
             }]);
 
-            if (!error) {
+            if (error) {
+                alert("Erro ao inserir: " + error.message);
+            } else {
                 document.getElementById('modal-add').classList.add('hidden');
                 document.getElementById('add-nome').value = '';
                 document.getElementById('add-qtd').value = '';
