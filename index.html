@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ASU estoques</title>
+    <title>ASU estoques | Sistema Central</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -24,7 +24,7 @@
     </header>
 
     <main class="p-4 max-w-lg mx-auto space-y-4">
-        <div id="status-cloud" class="text-[10px] font-black uppercase text-center text-slate-500 italic">Sincronizando...</div>
+        <div id="status-cloud" class="text-[10px] font-black uppercase text-center text-slate-500 italic">Sincronizando com ASU Cloud...</div>
         <input type="text" id="search" oninput="render()" placeholder="Buscar item no estoque..." class="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 outline-none focus:border-orange-500 text-white shadow-inner">
         <div id="grid" class="space-y-3"></div>
     </main>
