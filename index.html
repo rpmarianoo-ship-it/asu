@@ -1,39 +1,115 @@
-<script>
-    // CONFIGURAÇÃO CENTRAL ASU
-    const SUPABASE_URL = 'https://fzdwzmaqhttlljobjpky.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6ZHd6bWFxaHR0bGxqb2JqcGt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MDM1MDgsImV4cCI6MjA5MDQ3OTUwOH0.OnE6ZwUSjSdw8G0BrB7G6sabhTHVZ7-E5Fx_UB4gXSc';
-    
-    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    let estoqueLocal = [];
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ASU estoques</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: sans-serif; background-color: #0f172a; color: #f1f5f9; -webkit-tap-highlight-color: transparent; }
+        .asu-card { background: #1e293b; border: 1px solid #334155; border-radius: 2rem; padding: 1.5rem; transition: all 0.2s; }
+        .asu-card:active { transform: scale(0.97); }
+        input::-webkit-inner-spin-button { display: none; }
+    </style>
+</head>
+<body class="pb-24">
 
-    async function carregarDados() {
-        // AQUI ESTÁ O SEGREDO: MUDAMOS PARA 'asu' PARA BATER COM SEU PRINT
-        const { data, error } = await supabaseClient.from('asu').select('*').order('nome');
+    <header class="sticky top-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-orange-500 p-4 shadow-xl flex justify-between items-center">
+        <h1 class="text-2xl font-black italic uppercase tracking-tighter">ASU <span class="text-orange-500">estoques</span></h1>
+        <button onclick="document.getElementById('modal-add').classList.remove('hidden')" class="bg-orange-600 p-3 rounded-xl shadow-lg active:scale-90 transition-all">
+            <i data-lucide="plus" class="text-white"></i>
+        </button>
+    </header>
+
+    <main class="p-4 max-w-lg mx-auto space-y-4">
+        <div id="status-cloud" class="text-[10px] font-black uppercase text-center text-slate-500 italic">Sincronizando...</div>
         
-        if (error) {
-            console.error(error);
-            document.getElementById('status-cloud').innerHTML = `<span class="text-red-500 font-bold uppercase text-[8px]">Erro: ${error.message}</span>`;
-            return;
+        <input type="text" id="search" oninput="render()" placeholder="Buscar item no ASU..." 
+            class="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 outline-none focus:border-orange-500 text-white shadow-inner">
+
+        <div id="grid" class="space-y-3">
+            </div>
+    </main>
+
+    <div id="modal-add" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+        <div class="bg-slate-800 w-full max-w-md p-8 rounded-[2.5rem] border border-slate-700 shadow-2xl">
+            <h2 class="text-xl font-black mb-6 italic uppercase text-white tracking-widest text-center">Novo Insumo ASU</h2>
+            <div class="space-y-4">
+                <input type="text" id="add-nome" placeholder="Nome (ex: Manitoba)" class="w-full bg-slate-900 p-4 rounded-xl border border-slate-700 text-white outline-none">
+                <div class="flex gap-2">
+                    <input type="number" id="add-qtd" placeholder="Qtd" class="w-1/2 bg-slate-900 p-4 rounded-xl border border-slate-700 text-white outline-none">
+                    <select id="add-unidade" class="w-1/2 bg-slate-900 p-4 rounded-xl border border-slate-700 text-white font-bold outline-none">
+                        <option value="kg">kg</option><option value="un">un</option><option value="L">L</option><option value="g">g</option>
+                    </select>
+                </div>
+            </div>
+            <div class="flex gap-4 mt-8">
+                <button onclick="document.getElementById('modal-add').classList.add('hidden')" class="flex-1 font-bold text-slate-500 uppercase text-xs">Voltar</button>
+                <button onclick="addItem()" class="flex-1 py-4 bg-orange-600 rounded-xl font-bold text-white uppercase text-xs shadow-lg">Cadastrar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://fzdwzmaqhttlljobjpky.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6ZHd6bWFxaHR0bGxqb2JqcGt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MDM1MDgsImV4cCI6MjA5MDQ3OTUwOH0.OnE6ZwUSjSdw8G0BrB7G6sabhTHVZ7-E5Fx_UB4gXSc';
+        
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        let estoqueLocal = [];
+
+        async function carregarDados() {
+            const status = document.getElementById('status-cloud');
+            // NOME DA TABELA CORRIGIDO PARA 'asu'
+            const { data, error } = await supabaseClient.from('asu').select('*').order('nome');
+            
+            if (error) {
+                status.innerHTML = `<span class="text-red-500 font-bold uppercase text-[8px]">ERRO: ${error.message}</span>`;
+                return;
+            }
+            
+            estoqueLocal = data;
+            status.innerHTML = '<span class="text-green-500 italic font-bold tracking-tighter">● ASU Cloud Conectado</span>';
+            render();
         }
-        
-        estoqueLocal = data;
-        document.getElementById('status-cloud').innerHTML = '<span class="text-green-500 italic">● ASU Cloud Online</span>';
-        render();
-    }
 
-    async function addItem() {
-        const nome = document.getElementById('add-nome').value;
-        const qtd = parseFloat(document.getElementById('add-qtd').value);
-        const unidade = document.getElementById('add-unidade').value;
-        if(!nome || isNaN(qtd)) return;
+        async function addItem() {
+            const nome = document.getElementById('add-nome').value;
+            const qtd = parseFloat(document.getElementById('add-qtd').value);
+            const unidade = document.getElementById('add-unidade').value;
+            if(!nome || isNaN(qtd)) return;
 
-        // AQUI TAMBÉM MUDAMOS PARA 'asu'
-        const { error } = await supabaseClient.from('asu').insert([{ nome, qtd, unidade, min: 2, last_log: 'Cadastro Inicial' }]);
-        if (error) alert("Erro ao salvar! Verifique se o RLS está desativado.");
-        
-        document.getElementById('modal-add').classList.add('hidden');
-        carregarDados();
-    }
+            const { error } = await supabaseClient.from('asu').insert([{ nome, qtd, unidade, min: 2, last_log: 'Cadastro' }]);
+            if (error) alert("Erro: " + error.message);
+            
+            document.getElementById('modal-add').classList.add('hidden');
+            document.getElementById('add-nome').value = '';
+            document.getElementById('add-qtd').value = '';
+            carregarDados();
+        }
 
-    // ... o restante da função alterar e render também devem usar .from('asu') ...
-</script>
+        async function alterar(id, nome, qtdAtual, valor, uni) {
+            const quem = prompt(`Mudar estoque de ${nome}. Quem é você?`);
+            if(!quem) return;
+            const novaQtd = Math.max(0, parseFloat((qtdAtual + valor).toFixed(2)));
+            await supabaseClient.from('asu').update({ qtd: novaQtd, last_log: `${quem}: ${valor}${uni}` }).eq('id', id);
+            carregarDados();
+        }
+
+        async function excluir(id) {
+            if(confirm("Remover do sistema ASU?")) {
+                await supabaseClient.from('asu').delete().eq('id', id);
+                carregarDados();
+            }
+        }
+
+        function render() {
+            const grid = document.getElementById('grid');
+            const busca = document.getElementById('search').value.toLowerCase();
+            grid.innerHTML = '';
+
+            const filtrados = estoqueLocal.filter(i => i.nome.toLowerCase().includes(busca));
+
+            if(filtrados.length === 0 && busca === '') {
+                grid.
