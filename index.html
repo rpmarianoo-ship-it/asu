@@ -25,19 +25,15 @@
 
     <main class="p-4 max-w-lg mx-auto space-y-4">
         <div id="status-cloud" class="text-[10px] font-black uppercase text-center text-slate-500 italic">Sincronizando...</div>
-        
-        <input type="text" id="search" oninput="render()" placeholder="Buscar item no ASU..." 
-            class="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 outline-none focus:border-orange-500 text-white shadow-inner">
-
-        <div id="grid" class="space-y-3">
-            </div>
+        <input type="text" id="search" oninput="render()" placeholder="Buscar item no ASU..." class="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 outline-none focus:border-orange-500 text-white shadow-inner">
+        <div id="grid" class="space-y-3"></div>
     </main>
 
     <div id="modal-add" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
         <div class="bg-slate-800 w-full max-w-md p-8 rounded-[2.5rem] border border-slate-700 shadow-2xl">
             <h2 class="text-xl font-black mb-6 italic uppercase text-white tracking-widest text-center">Novo Insumo ASU</h2>
             <div class="space-y-4">
-                <input type="text" id="add-nome" placeholder="Nome (ex: Manitoba)" class="w-full bg-slate-900 p-4 rounded-xl border border-slate-700 text-white outline-none">
+                <input type="text" id="add-nome" placeholder="Nome" class="w-full bg-slate-900 p-4 rounded-xl border border-slate-700 text-white outline-none">
                 <div class="flex gap-2">
                     <input type="number" id="add-qtd" placeholder="Qtd" class="w-1/2 bg-slate-900 p-4 rounded-xl border border-slate-700 text-white outline-none">
                     <select id="add-unidade" class="w-1/2 bg-slate-900 p-4 rounded-xl border border-slate-700 text-white font-bold outline-none">
@@ -46,8 +42,8 @@
                 </div>
             </div>
             <div class="flex gap-4 mt-8">
-                <button onclick="document.getElementById('modal-add').classList.add('hidden')" class="flex-1 font-bold text-slate-500 uppercase text-xs">Voltar</button>
-                <button onclick="addItem()" class="flex-1 py-4 bg-orange-600 rounded-xl font-bold text-white uppercase text-xs shadow-lg">Cadastrar</button>
+                <button onclick="document.getElementById('modal-add').classList.add('hidden')" class="flex-1 font-bold text-slate-500">Voltar</button>
+                <button onclick="addItem()" class="flex-1 py-4 bg-orange-600 rounded-xl font-bold text-white shadow-lg">Salvar</button>
             </div>
         </div>
     </div>
@@ -61,7 +57,7 @@
 
         async function carregarDados() {
             const status = document.getElementById('status-cloud');
-            // NOME DA TABELA CORRIGIDO PARA 'asu'
+            // MUDANÇA AQUI: Corrigido de 'estoque_asu' para 'asu'
             const { data, error } = await supabaseClient.from('asu').select('*').order('nome');
             
             if (error) {
@@ -70,7 +66,7 @@
             }
             
             estoqueLocal = data;
-            status.innerHTML = '<span class="text-green-500 italic font-bold tracking-tighter">● ASU Cloud Conectado</span>';
+            status.innerHTML = '<span class="text-green-500 italic font-bold tracking-tighter">● ASU Cloud Online</span>';
             render();
         }
 
@@ -80,12 +76,9 @@
             const unidade = document.getElementById('add-unidade').value;
             if(!nome || isNaN(qtd)) return;
 
-            const { error } = await supabaseClient.from('asu').insert([{ nome, qtd, unidade, min: 2, last_log: 'Cadastro' }]);
-            if (error) alert("Erro: " + error.message);
-            
+            // MUDANÇA AQUI: Corrigido para 'asu'
+            await supabaseClient.from('asu').insert([{ nome, qtd, unidade, min: 2, last_log: 'Cadastro' }]);
             document.getElementById('modal-add').classList.add('hidden');
-            document.getElementById('add-nome').value = '';
-            document.getElementById('add-qtd').value = '';
             carregarDados();
         }
 
@@ -93,23 +86,40 @@
             const quem = prompt(`Mudar estoque de ${nome}. Quem é você?`);
             if(!quem) return;
             const novaQtd = Math.max(0, parseFloat((qtdAtual + valor).toFixed(2)));
+            // MUDANÇA AQUI: Corrigido para 'asu'
             await supabaseClient.from('asu').update({ qtd: novaQtd, last_log: `${quem}: ${valor}${uni}` }).eq('id', id);
             carregarDados();
-        }
-
-        async function excluir(id) {
-            if(confirm("Remover do sistema ASU?")) {
-                await supabaseClient.from('asu').delete().eq('id', id);
-                carregarDados();
-            }
         }
 
         function render() {
             const grid = document.getElementById('grid');
             const busca = document.getElementById('search').value.toLowerCase();
             grid.innerHTML = '';
-
             const filtrados = estoqueLocal.filter(i => i.nome.toLowerCase().includes(busca));
+            
+            if(filtrados.length === 0) {
+                grid.innerHTML = '<p class="py-10 text-slate-600 text-[10px] font-black uppercase text-center italic">Nenhum item encontrado.</p>';
+            }
 
-            if(filtrados.length === 0 && busca === '') {
-                grid.
+            filtrados.forEach(item => {
+                grid.innerHTML += `
+                    <div class="asu-card flex justify-between items-center">
+                        <div class="text-left overflow-hidden">
+                            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest truncate mb-1">${item.nome}</p>
+                            <p class="text-4xl font-black text-white leading-none">${item.qtd}<span class="text-xs text-orange-500 ml-1 italic font-black uppercase">${item.unidade}</span></p>
+                            <p class="text-[8px] text-slate-600 uppercase mt-2 italic">${item.last_log || ''}</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="alterar(${item.id},'${item.nome}',${item.qtd},-1,'${item.unidade}')" class="w-14 h-14 bg-slate-700 rounded-2xl font-bold text-2xl text-white">-</button>
+                            <button onclick="alterar(${item.id},'${item.nome}',${item.qtd},1,'${item.unidade}')" class="w-14 h-14 bg-orange-600 rounded-2xl font-bold text-2xl text-white">+</button>
+                        </div>
+                    </div>`;
+            });
+            lucide.createIcons();
+        }
+
+        carregarDados();
+        setInterval(carregarDados, 5000);
+    </script>
+</body>
+</html>
