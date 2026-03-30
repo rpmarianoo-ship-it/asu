@@ -62,7 +62,7 @@
 
         async function carregarDados() {
             const status = document.getElementById('status-cloud');
-            const { data, error } = await supabaseClient.from('estoque_asu').select('*').order('nome');
+            const { data, error } = await supabaseClient.from('asu').select('*').order('nome');
             
             if (error) {
                 status.innerHTML = '<span class="text-red-500 italic">Erro: Verifique o RLS no Supabase</span>';
@@ -81,7 +81,7 @@
             const unidade = document.getElementById('add-unidade').value;
             if(!nome || isNaN(qtd)) return;
 
-            const { error } = await supabaseClient.from('estoque_asu').insert([{ nome, qtd, unidade, min: 2, last_log: 'Cadastro Inicial' }]);
+            const { error } = await supabaseClient.from('asu').insert([{ nome, qtd, unidade, min: 2, last_log: 'Cadastro Inicial' }]);
             if (error) {
                 alert("Erro ao salvar! Verifique se o RLS está desabilitado no Supabase.");
             } else {
@@ -99,7 +99,7 @@
             const novaQtd = Math.max(0, parseFloat((qtdAtual + valor).toFixed(2)));
             const log = `${quem} mexeu ${valor}${uni}`;
 
-            const { error } = await supabaseClient.from('estoque_asu').update({ qtd: novaQtd, last_log: log }).eq('id', id);
+            const { error } = await supabaseClient.from('asu').update({ qtd: novaQtd, last_log: log }).eq('id', id);
             if(error) alert("Erro ao atualizar!");
             carregarDados();
         }
