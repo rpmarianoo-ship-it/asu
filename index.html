@@ -26,13 +26,19 @@
 <body class="pb-24">
 
     <header class="sticky top-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-slate-700 p-4 shadow-xl">
-        <div class="max-w-lg mx-auto flex justify-center items-center relative">
+        <div class="max-w-lg mx-auto flex justify-center items-center relative h-10">
             <h1 class="text-2xl font-black italic uppercase tracking-tighter text-white text-center">
                 ASU <span class="outline-text">estoques</span>
             </h1>
-            <button onclick="document.getElementById('modal-add').classList.remove('hidden')" class="absolute right-0 bg-orange-600 p-2 rounded-xl shadow-lg active:scale-90 transition-all">
-                <i data-lucide="plus" class="text-white w-6 h-6"></i>
-            </button>
+            
+            <div class="absolute right-0 flex gap-2">
+                <button onclick="abrirRelatorio()" class="bg-slate-700 p-2 rounded-xl shadow-lg active:scale-90 transition-all border border-slate-600">
+                    <i data-lucide="clipboard-list" class="text-white w-6 h-6"></i>
+                </button>
+                <button onclick="document.getElementById('modal-add').classList.remove('hidden')" class="bg-orange-600 p-2 rounded-xl shadow-lg active:scale-90 transition-all">
+                    <i data-lucide="plus" class="text-white w-6 h-6"></i>
+                </button>
+            </div>
         </div>
     </header>
 
@@ -41,6 +47,23 @@
         <input type="text" id="search" oninput="renderStockItems()" placeholder="Buscar insumo..." class="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 outline-none focus:border-orange-500 text-white shadow-inner">
         <div id="grid" class="space-y-4"></div>
     </main>
+
+    <div id="modal-report" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+        <div class="bg-slate-800 w-full max-w-md p-6 rounded-[2rem] border border-slate-700 shadow-2xl flex flex-col h-[85vh]">
+            <div class="flex justify-between items-center mb-4 border-b border-slate-700 pb-3">
+                <div>
+                    <h2 class="text-lg font-black italic uppercase text-white leading-none">Relatório Geral</h2>
+                    <p class="text-[10px] text-slate-400 font-bold uppercase mt-1">Todas as movimentações</p>
+                </div>
+                <button onclick="document.getElementById('modal-report').classList.add('hidden')" class="bg-slate-700 p-2 rounded-xl active:scale-90">
+                    <i data-lucide="x" class="text-white w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <div id="report-content" class="flex-1 overflow-y-auto pr-2 space-y-3 historico-scroll">
+                </div>
+        </div>
+    </div>
 
     <div id="modal-add" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
         <div class="bg-slate-800 w-full max-w-md p-8 rounded-[2.5rem] border border-slate-700 shadow-2xl">
@@ -63,7 +86,6 @@
     </div>
 
     <script>
-        // CONFIGURAÇÕES DO BANCO
         const SUPABASE_URL = 'https://fzdwzmaqhttlljobjpky.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6ZHd6bWFxaHR0bGxqb2JqcGt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MDM1MDgsImV4cCI6MjA5MDQ3OTUwOH0.OnE6ZwUSjSdw8G0BrB7G6sabhTHVZ7-E5Fx_UB4gXSc';
         
@@ -73,11 +95,7 @@
         async function loadStockData() {
             try {
                 const statusLabel = document.getElementById('status-cloud');
-                
-                // Cria o cliente se ainda não existir
-                if (!supabaseClient) {
-                    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-                }
+                if (!supabaseClient) supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
                 
                 const { data, error } = await supabaseClient.from('estoque_asu').select('*').order('nome');
                 
@@ -105,7 +123,7 @@
             if(!user) return;
 
             const dataAtual = new Date().toLocaleDateString('pt-BR');
-            const logInicial = `[${dataAtual}] ${user} cadastrou o item.`;
+            const logInicial = `[${dataAtual} 00:00] ${user} cadastrou o item.`;
 
             const { error } = await supabaseClient.from('estoque_asu').insert([{ 
                 nome, qtd, unidade, min, last_log: logInicial 
@@ -146,9 +164,7 @@
             const logNovo = `[${dataHora}] ${user} ${textoAcao}${valorNum}${uni}`;
 
             let logsArray = [];
-            if(logAntigo) {
-                logsArray = String(logAntigo).split('|').filter(Boolean);
-            }
+            if(logAntigo) logsArray = String(logAntigo).split('|').filter(Boolean);
             
             logsArray.unshift(logNovo); 
             if(logsArray.length > 20) logsArray.pop(); 
@@ -166,6 +182,76 @@
                 await supabaseClient.from('estoque_asu').delete().eq('nome', nome); 
                 loadStockData(); 
             }
+        }
+
+        // FUNÇÃO NOVA: Gera o relatório global
+        function abrirRelatorio() {
+            const container = document.getElementById('report-content');
+            container.innerHTML = '';
+            
+            let todosLogs = [];
+            
+            // Varre todos os itens e extrai os logs
+            currentStockData.forEach(item => {
+                if(item.last_log) {
+                    const logs = String(item.last_log).split('|').filter(Boolean);
+                    logs.forEach(linhaLog => {
+                        // Tenta extrair a data para organizar do mais novo pro mais velho
+                        let valorOrdem = 0;
+                        const matchData = linhaLog.match(/\[(.*?)\]/);
+                        if(matchData) {
+                            // Converte a data [DD/MM/YYYY HH:MM] para um número organizável
+                            const partes = matchData[1].split(' ');
+                            if(partes.length === 2) {
+                                const d = partes[0].split('/');
+                                if(d.length === 3) {
+                                    valorOrdem = parseInt(d[2] + d[1] + d[0] + partes[1].replace(':', ''));
+                                }
+                            }
+                        }
+                        
+                        todosLogs.push({
+                            nomeItem: item.nome,
+                            textoLog: linhaLog,
+                            ordem: valorOrdem
+                        });
+                    });
+                }
+            });
+            
+            // Organiza do mais recente (maior número) para o mais antigo
+            todosLogs.sort((a, b) => b.ordem - a.ordem);
+
+            if(todosLogs.length === 0) {
+                container.innerHTML = '<p class="text-slate-500 text-center mt-10 text-xs font-black uppercase">Nenhuma movimentação registrada.</p>';
+            } else {
+                todosLogs.forEach(registro => {
+                    // Pinta o texto dependendo do que aconteceu
+                    let corTexto = "text-slate-300";
+                    let bgFundo = "bg-slate-900";
+                    
+                    if(registro.textoLog.includes('Adicionou')) {
+                        corTexto = "text-emerald-400";
+                        bgFundo = "bg-emerald-900/10 border-emerald-900/50";
+                    } else if(registro.textoLog.includes('Retirou')) {
+                        corTexto = "text-rose-400";
+                        bgFundo = "bg-rose-900/10 border-rose-900/50";
+                    } else if(registro.textoLog.includes('cadastrou')) {
+                        corTexto = "text-orange-400";
+                        bgFundo = "bg-orange-900/10 border-orange-900/50";
+                    }
+
+                    container.innerHTML += `
+                        <div class="p-3 rounded-xl border border-slate-700/50 shadow-sm ${bgFundo}">
+                            <p class="text-[11px] text-slate-400 font-black uppercase tracking-widest mb-1 truncate">${registro.nomeItem}</p>
+                            <p class="text-sm font-bold ${corTexto} leading-snug">${registro.textoLog}</p>
+                        </div>
+                    `;
+                });
+            }
+            
+            // Mostra a tela
+            document.getElementById('modal-report').classList.remove('hidden');
         }
 
         function renderStockItems() {
@@ -221,11 +307,9 @@
                     </div>`;
             });
             
-            // Tenta desenhar os ícones, se falhar não trava a tela
             try { if (typeof lucide !== 'undefined') lucide.createIcons(); } catch(e) {}
         }
 
-        // IGNIÇÃO DIRETA (Não espera a página carregar)
         loadStockData();
         setInterval(loadStockData, 5000);
     </script>
