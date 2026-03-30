@@ -18,9 +18,6 @@
         input::-webkit-inner-spin-button { display: none; }
         .outline-text { color: black; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff; }
         .critical-alert { border: 2px solid #ef4444 !important; background-color: #450a0a !important; }
-        .historico-scroll::-webkit-scrollbar { width: 4px; }
-        .historico-scroll::-webkit-scrollbar-track { background: transparent; }
-        .historico-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
     </style>
 </head>
 <body class="pb-24">
@@ -37,10 +34,8 @@
     </header>
 
     <main class="p-4 max-w-lg mx-auto space-y-4">
-        <div id="debug-box" class="hidden bg-red-600 p-4 rounded-xl text-white font-bold text-xs break-words"></div>
-        
-        <div id="status-cloud" class="text-[10px] font-black uppercase text-center text-slate-500 italic">Iniciando...</div>
-        <input type="text" id="search" oninput="renderStockItems()" placeholder="Buscar insumo..." class="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 outline-none focus:border-orange-500 text-white shadow-inner">
+        <div id="status-cloud" class="text-[10px] font-black uppercase text-center text-slate-500 italic">Sincronizando...</div>
+        <input type="text" id="search" oninput="renderStockItems()" placeholder="Buscar insumo..." class="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 outline-none focus:border-orange-500 text-white">
         <div id="grid" class="space-y-4"></div>
     </main>
 
@@ -65,39 +60,140 @@
     </div>
 
     <script>
-        function showError(msg) {
-            const box = document.getElementById('debug-box');
-            box.classList.remove('hidden');
-            box.innerText = "ERRO DETECTADO: " + msg;
-            document.getElementById('status-cloud').innerHTML = `<span class="text-red-500 font-bold uppercase text-[9px]">Falha</span>`;
-        }
-
-        window.onerror = function(message, source, lineno, colno, error) {
-            showError(message + " (Linha: " + lineno + ")");
-        };
-
         const SUPABASE_URL = 'https://fzdwzmaqhttlljobjpky.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6ZHd6bWFxaHR0bGxqb2JqcGt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MDM1MDgsImV4cCI6MjA5MDQ3OTUwOH0.OnE6ZwUSjSdw8G0BrB7G6sabhTHVZ7-E5Fx_UB4gXSc';
-        
-        let supabaseClient;
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         let currentStockData = [];
 
-        async function init() {
-            try {
-                if (typeof supabase === 'undefined') {
-                    showError("Supabase não carregou. Verifique sua conexão ou AdBlock.");
-                    return;
-                }
-                supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-                await loadStockData();
-                setInterval(loadStockData, 5000); // Atualiza a cada 5s
-            } catch (e) {
-                showError("Falha na inicialização: " + e.message);
+        async function loadStockData() {
+            const statusLabel = document.getElementById('status-cloud');
+            const { data, error } = await supabaseClient.from('estoque_asu').select('*').order('nome');
+            
+            if (error) { 
+                statusLabel.innerHTML = `<span class="text-red-500 font-bold uppercase">Erro: ${error.message}</span>`; 
+                return; 
+            }
+            
+            currentStockData = data;
+            statusLabel.innerHTML = '<span class="text-green-500 italic font-bold">● ASU Cloud On-line</span>';
+            renderStockItems();
+        }
+
+        async function addNewStockItem() {
+            const nome = document.getElementById('add-nome').value;
+            const qtd = parseFloat(document.getElementById('add-qtd').value);
+            const unidade = document.getElementById('add-unidade').value;
+            const min = parseFloat(document.getElementById('add-min').value) || 2;
+            
+            if(!nome || isNaN(qtd)) {
+                alert("Preencha nome e quantidade!");
+                return;
+            }
+            
+            const user = prompt("Quem está cadastrando?");
+            if(!user) return;
+
+            const { error } = await supabaseClient.from('estoque_asu').insert([{ 
+                nome, qtd, unidade, min, last_log: `${user} cadastrou.` 
+            }]);
+
+            if(error) {
+                alert("Erro ao salvar (Lembre-se: O nome não pode ser repetido!): " + error.message);
+            } else {
+                document.getElementById('modal-add').classList.add('hidden');
+                document.getElementById('add-nome').value = '';
+                document.getElementById('add-qtd').value = '';
+                document.getElementById('add-min').value = '';
+                loadStockData();
             }
         }
 
-        async function loadStockData() {
-            try {
-                const statusLabel = document.getElementById('status-cloud');
-                
-                const { data, error } = await supabaseClient.from('estoque_asu
+        // AGORA BUSCA PELO NOME EM VEZ DO ID
+        async function updateStockItemQuantity(nome, qtdAtual, operacao, uni) {
+            const acaoStr = operacao === 'add' ? 'adicionar' : 'retirar';
+            const strValor = prompt(`Quantos '${uni}' deseja ${acaoStr} de ${nome}?`);
+            if(!strValor) return;
+            
+            const valorNum = parseFloat(strValor.replace(',', '.'));
+            if(isNaN(valorNum) || valorNum <= 0) {
+                alert("Digite um número válido maior que zero!");
+                return;
+            }
+
+            const user = prompt("Quem está alterando? (Seu nome)");
+            if(!user) return;
+
+            const qtdAtualCerta = parseFloat(qtdAtual);
+            const mudanca = operacao === 'add' ? valorNum : -valorNum;
+            const novaQtd = Math.max(0, parseFloat((qtdAtualCerta + mudanca).toFixed(2)));
+            
+            const textoAcao = operacao === 'add' ? 'Adicionou' : 'Retirou';
+            const logEntry = `${user} ${textoAcao} ${valorNum}${uni}`;
+
+            // ATUALIZA USANDO O .eq('nome', nome)
+            const { error } = await supabaseClient.from('estoque_asu').update({ 
+                qtd: novaQtd, 
+                last_log: logEntry 
+            }).eq('nome', nome);
+
+            if(error) {
+                alert("Erro ao atualizar: " + error.message);
+            } else {
+                loadStockData();
+            }
+        }
+
+        async function deleteStockItem(nome) {
+            if(confirm(`Tem certeza que deseja excluir ${nome} do ASU?`)) { 
+                // DELETA USANDO O .eq('nome', nome)
+                await supabaseClient.from('estoque_asu').delete().eq('nome', nome); 
+                loadStockData(); 
+            }
+        }
+
+        function renderStockItems() {
+            const itemGrid = document.getElementById('grid');
+            const searchQuery = document.getElementById('search').value.toLowerCase();
+            itemGrid.innerHTML = '';
+            
+            const filtrados = currentStockData.filter(item => item.nome.toLowerCase().includes(searchQuery));
+
+            if(filtrados.length === 0) {
+                itemGrid.innerHTML = '<p class="py-10 text-slate-500 text-xs font-black uppercase text-center italic">Nenhum item encontrado.</p>';
+                return;
+            }
+
+            filtrados.forEach(item => {
+                const isCritical = parseFloat(item.qtd) <= parseFloat(item.min || 2);
+                const nomeSeguro = item.nome.replace(/'/g, "\\'");
+
+                itemGrid.innerHTML += `
+                    <div class="asu-card flex flex-col ${isCritical ? 'critical-alert' : ''}">
+                        <div class="flex justify-between items-center w-full">
+                            <div class="text-left w-2/3">
+                                <p class="text-[12px] font-black text-slate-400 uppercase tracking-widest mb-1 truncate">${item.nome}</p>
+                                <p class="text-4xl font-black text-white leading-none">${item.qtd}<span class="text-xs text-slate-400 ml-1 italic uppercase">${item.unidade}</span></p>
+                                <p class="text-[10px] text-red-400 mt-1 uppercase font-bold tracking-widest ${isCritical ? 'block' : 'hidden'}">⚠️ Estoque Baixo</p>
+                            </div>
+                            <div class="flex gap-2 w-1/3 justify-end">
+                                <button onclick="updateStockItemQuantity('${nomeSeguro}', '${item.qtd}', 'sub', '${item.unidade}')" class="w-12 h-12 bg-slate-700 rounded-2xl font-bold text-3xl text-white shadow-xl flex items-center justify-center pb-1">-</button>
+                                <button onclick="updateStockItemQuantity('${nomeSeguro}', '${item.qtd}', 'add', '${item.unidade}')" class="w-12 h-12 bg-orange-600 rounded-2xl font-bold text-3xl text-white shadow-xl flex items-center justify-center pb-1">+</button>
+                            </div>
+                        </div>
+                        <div class="mt-4 pt-3 border-t border-slate-700/50 flex justify-between items-center">
+                            <div class="bg-black/40 p-3 rounded-xl flex-1 mr-4 border border-slate-700">
+                                <p class="text-[9px] text-slate-500 uppercase font-black mb-1 tracking-widest">Última Movimentação:</p>
+                                <p class="text-xs font-black text-orange-400">${item.last_log || 'Nenhum registro'}</p>
+                            </div>
+                            <button onclick="deleteStockItem('${nomeSeguro}')" class="p-3 text-slate-600 hover:text-red-500 bg-slate-900 rounded-xl shadow-inner"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+                        </div>
+                    </div>`;
+            });
+            lucide.createIcons();
+        }
+
+        window.onload = loadStockData;
+        setInterval(loadStockData, 5000);
+    </script>
+</body>
+</html>
