@@ -18,61 +18,107 @@
         .historico-scroll::-webkit-scrollbar { width: 4px; }
         .historico-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
         .mise-item { border-left: 4px solid #ef4444; background: #1e293b; padding: 1rem; border-radius: 1rem; margin-bottom: 0.5rem; }
+        
+        /* Modais Consertados */
+        .modal-container { display: none; position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.95); backdrop-filter: blur(10px); align-items: center; justify-content: center; padding: 1rem; }
+        .modal-active { display: flex !important; }
+        
+        /* Checklist */
+        .dish-card { background: #1e293b; border: 1px solid #475569; border-radius: 1.5rem; padding: 1.2rem; margin-bottom: 1rem; }
+        .item-check { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #33415566; cursor: pointer; }
+        .item-check input { width: 20px; height: 20px; accent-color: #f97316; }
+        .item-check.done span { text-decoration: line-through; color: #64748b; font-style: italic; }
     </style>
 </head>
 <body class="pb-24">
 
     <header class="sticky top-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-slate-700 p-4 shadow-xl">
         <div class="max-w-lg mx-auto flex justify-between items-center h-10">
-            <button onclick="gerarListaMise()" class="bg-red-600/20 text-red-500 border border-red-500/50 px-4 py-2 rounded-xl font-black italic uppercase text-[10px] flex items-center gap-2 active:scale-90 transition-all">
-                <i data-lucide="utensils"></i> MISE
+            <button onclick="gerarListaMise()" class="bg-red-600/20 text-red-500 border border-red-500/50 px-4 py-2 rounded-xl font-black italic uppercase text-[10px] flex items-center gap-2 active:scale-90">
+                <i data-lucide="utensils" class="w-4 h-4"></i> MISE
             </button>
 
             <h1 class="text-xl font-black italic uppercase tracking-tighter text-white">
                 ASU <span class="outline-text">estoques</span>
             </h1>
             
-            <div class="flex gap-2">
-                <button onclick="abrirRelatorio()" class="bg-slate-700 p-2 rounded-xl border border-slate-600">
-                    <i data-lucide="clipboard-list" class="text-white w-5 h-5"></i>
-                </button>
-                <button onclick="document.getElementById('modal-add').classList.remove('hidden')" class="bg-orange-600 p-2 rounded-xl shadow-lg active:scale-90 transition-all">
-                    <i data-lucide="plus" class="text-white w-5 h-5"></i>
-                </button>
+            <div class="flex gap-1.5">
+                <button onclick="alternarTela('checklist')" class="bg-slate-700 p-2 rounded-xl text-lg active:scale-90">👨‍🍳</button>
+                <button onclick="abrirModal('modal-calc')" class="bg-indigo-600 p-2 rounded-xl active:scale-90"><i data-lucide="calculator" class="w-5 h-5 text-white"></i></button>
+                <button onclick="abrirModal('modal-report')" class="bg-slate-500 p-2 rounded-xl active:scale-90"><i data-lucide="clipboard-list" class="w-5 h-5 text-white"></i></button>
+                <button onclick="abrirModal('modal-add')" class="bg-orange-600 p-2 rounded-xl shadow-lg active:scale-90"><i data-lucide="plus" class="text-white w-5 h-5"></i></button>
             </div>
         </div>
     </header>
 
-    <main class="p-4 max-w-lg mx-auto space-y-4">
+    <main id="tela-estoque" class="p-4 max-w-lg mx-auto space-y-4">
         <div id="status-cloud" class="text-[10px] font-black uppercase text-center text-slate-500 italic">Sincronizando...</div>
         <input type="text" id="search" oninput="renderStockItems()" placeholder="Buscar insumo..." class="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 outline-none focus:border-orange-500 text-white">
         <div id="grid" class="space-y-4"></div>
     </main>
 
-    <div id="modal-mise" class="hidden fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
-        <div class="bg-slate-900 w-full max-w-md p-6 rounded-[2.5rem] border border-red-500/30 shadow-2xl flex flex-col h-[80vh]">
+    <main id="tela-checklist" class="hidden p-4 max-w-lg mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-2xl font-black italic uppercase text-orange-500">Mise 👨‍🍳</h2>
+            <button onclick="alternarTela('estoque')" class="bg-slate-700 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase active:scale-90">Voltar</button>
+        </div>
+        <div id="checklist-content" class="space-y-4">
+            </div>
+        <button onclick="resetChecklist()" class="w-full mt-6 py-4 bg-slate-800 text-white rounded-xl font-black uppercase text-xs border border-slate-700">Limpar Checklist</button>
+    </main>
+
+    <div id="modal-calc" class="modal-container">
+        <div class="bg-slate-800 w-full max-w-md p-6 rounded-[2.5rem] border border-indigo-500/30 flex flex-col h-[80vh]">
             <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-black italic uppercase text-red-500">Mise en Place</h2>
-                <button onclick="document.getElementById('modal-mise').classList.add('hidden')" class="bg-slate-800 p-2 rounded-xl">
-                    <i data-lucide="x" class="text-white w-6 h-6"></i>
-                </button>
+                <h2 class="text-2xl font-black italic uppercase text-indigo-400 leading-none">Calculadora</h2>
+                <button onclick="fecharModais()" class="bg-slate-700 p-2 rounded-xl"><i data-lucide="x" class="w-5 h-5 text-white"></i></button>
             </div>
-            <div id="mise-content" class="flex-1 overflow-y-auto pr-2 historico-scroll"></div>
-            <button onclick="window.print()" class="mt-4 w-full py-4 bg-white text-black font-black uppercase italic rounded-2xl text-xs">Imprimir / PDF</button>
+            
+            <div class="space-y-4 overflow-y-auto pr-2 historico-scroll">
+                <div class="bg-slate-900 p-4 rounded-3xl">
+                    <div class="flex justify-between items-center mb-2">
+                        <p class="text-[9px] font-black uppercase text-slate-500">Receitas:</p>
+                        <div class="flex gap-2">
+                            <button onclick="prepararEdicaoReceita()" id="btn-edit" class="hidden text-[9px] font-black text-amber-400">EDITAR</button>
+                            <button onclick="excluirReceita()" id="btn-del" class="hidden text-[9px] font-black text-red-500">EXCLUIR</button>
+                            <button onclick="abrirNovaReceita()" class="text-[9px] font-black text-indigo-400">+ NOVA</button>
+                        </div>
+                    </div>
+                    <select id="select-receita" onchange="alternarBotoesReceita()" class="w-full bg-slate-950 p-3 rounded-xl border border-indigo-500/50 font-black text-white uppercase text-xs outline-none">
+                        <option value="">Carregando...</option>
+                    </select>
+                </div>
+                
+                <div class="bg-slate-900 p-4 rounded-3xl text-center">
+                    <input type="number" id="calc-fator" placeholder="QTD DESEJADA" class="w-full bg-slate-950 p-3 rounded-xl text-center text-xl font-black text-white outline-none mb-2">
+                    <button onclick="calcularProducao()" class="w-full py-3 bg-indigo-600 text-white font-black uppercase text-[10px] rounded-xl">Calcular</button>
+                </div>
+                
+                <div id="resultado-calc" class="hidden bg-white p-4 rounded-2xl text-black">
+                    <div id="lista-necessidade" class="space-y-1 font-black text-lg italic"></div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div id="modal-report" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-        <div class="bg-slate-800 w-full max-w-md p-6 rounded-[2rem] border border-slate-700 flex flex-col h-[85vh]">
-            <div class="flex justify-between items-center mb-4 border-b border-slate-700 pb-3">
-                <h2 class="text-lg font-black italic uppercase text-white">Relatório Geral</h2>
-                <button onclick="document.getElementById('modal-report').classList.add('hidden')" class="bg-slate-700 p-2 rounded-xl"><i data-lucide="x" class="text-white w-5 h-5"></i></button>
+    <div id="modal-nova-receita" class="modal-container" style="z-index: 150;">
+        <div class="bg-slate-800 w-full max-w-md p-6 rounded-[2.5rem] border border-indigo-500 shadow-2xl">
+            <h2 id="rec-titulo" class="text-xl font-black italic uppercase text-white mb-4">Receita</h2>
+            <input type="hidden" id="edit-id-receita">
+            <div class="space-y-3">
+                <input type="text" id="receita-nome" placeholder="NOME" class="w-full bg-slate-900 p-3 rounded-xl border border-slate-700 text-white text-xs uppercase font-black outline-none">
+                <input type="number" id="receita-base" placeholder="BASE (EX: 10)" class="w-full bg-slate-900 p-3 rounded-xl border border-slate-700 text-white text-xs uppercase font-black outline-none">
+                <div id="ingredientes-container" class="space-y-2 mt-4 max-h-40 overflow-y-auto historico-scroll"></div>
+                <button onclick="adicionarLinhaIngrediente()" class="text-[9px] font-black text-indigo-400 uppercase">+ Ingrediente</button>
             </div>
-            <div id="report-content" class="flex-1 overflow-y-auto space-y-3 historico-scroll"></div>
+            <div class="flex gap-2 mt-6">
+                <button onclick="document.getElementById('modal-nova-receita').classList.remove('modal-active')" class="flex-1 text-[10px] font-black text-slate-500 uppercase">Voltar</button>
+                <button onclick="salvarReceitaNuvem()" class="flex-1 py-3 bg-indigo-600 rounded-xl text-[10px] font-black text-white uppercase italic shadow-lg">Salvar</button>
+            </div>
         </div>
     </div>
 
-    <div id="modal-add" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+    <div id="modal-add" class="modal-container">
         <div class="bg-slate-800 w-full max-w-md p-8 rounded-[2.5rem] border border-slate-700 shadow-2xl">
             <h2 class="text-xl font-black mb-6 italic uppercase text-white text-center">Novo Insumo</h2>
             <div class="space-y-4">
@@ -86,9 +132,29 @@
                 <input type="number" id="add-min" placeholder="ESTOQUE MÍNIMO" class="w-full bg-slate-900 p-4 rounded-xl border border-slate-700 text-white outline-none">
             </div>
             <div class="flex gap-4 mt-8">
-                <button onclick="document.getElementById('modal-add').classList.add('hidden')" class="flex-1 font-bold text-slate-500 uppercase text-xs">Voltar</button>
-                <button onclick="addNewStockItem()" class="flex-1 py-4 bg-orange-600 rounded-xl font-bold text-white shadow-lg uppercase text-xs">Salvar</button>
+                <button onclick="fecharModais()" class="flex-1 font-bold text-slate-500 uppercase text-xs">Voltar</button>
+                <button onclick="addNewStockItem()" class="flex-1 py-4 bg-orange-600 rounded-xl font-bold text-white shadow-lg uppercase text-xs italic">Salvar</button>
             </div>
+        </div>
+    </div>
+
+    <div id="modal-report" class="modal-container">
+        <div class="bg-slate-800 w-full max-w-md p-6 rounded-[2rem] border border-slate-700 flex flex-col h-[85vh]">
+            <div class="flex justify-between items-center mb-4 border-b border-slate-700 pb-3">
+                <h2 class="text-lg font-black italic uppercase text-white">Relatório</h2>
+                <button onclick="fecharModais()" class="bg-slate-700 p-2 rounded-xl text-white"><i data-lucide="x"></i></button>
+            </div>
+            <div id="report-content" class="flex-1 overflow-y-auto space-y-3 historico-scroll"></div>
+        </div>
+    </div>
+
+    <div id="modal-mise" class="modal-container">
+        <div class="bg-slate-900 w-full max-w-md p-6 rounded-[2.5rem] border border-red-500/30 flex flex-col h-[80vh]">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-black italic uppercase text-red-500">Mise em Falta</h2>
+                <button onclick="fecharModais()" class="bg-slate-800 p-2 rounded-xl text-white"><i data-lucide="x"></i></button>
+            </div>
+            <div id="mise-content" class="flex-1 overflow-y-auto pr-2 historico-scroll"></div>
         </div>
     </div>
 
@@ -96,17 +162,138 @@
         const SUPABASE_URL = 'https://fzdwzmaqhttlljobjpky.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6ZHd6bWFxaHR0bGxqb2JqcGt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MDM1MDgsImV4cCI6MjA5MDQ3OTUwOH0.OnE6ZwUSjSdw8G0BrB7G6sabhTHVZ7-E5Fx_UB4gXSc';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        
         let currentStockData = [];
+        let receitasNuvem = [];
 
-        async function loadStockData() {
-            const { data, error } = await supabaseClient.from('estoque_asu').select('*').order('nome');
-            if (error) return;
-            currentStockData = data || [];
-            document.getElementById('status-cloud').innerHTML = '<span class="text-green-500 italic font-bold">● ASU Cloud On-line</span>';
-            renderStockItems();
+        // DADOS DO CHECKLIST (Seus pratos do CSV)
+        const pratosChef = [
+            { p: "Fettuccine Camarão", i: ["Fettuccine", "Camarão G", "Molho camarão", "Azeite manjericão", "Manteiga de ervas", "Salsinha"] },
+            { p: "Chorizo", i: ["Chorizo", "Purê de batata", "Glace porco", "Nirá", "Rúcula", "Picles cebola roxa"] },
+            { p: "Polvo", i: ["Polvo", "Batata bolinha", "Alho negro", "Emulsão chipotle", "Limão"] },
+            { p: "Arroz de Pato", i: ["Arroz", "Sofrito", "Caldo pato", "Pato", "Vinagrete cambuci", "Cebolete"] },
+            { p: "Nhoque Doce", i: ["Nhoque", "Ragu porco", "Nata ácida", "Crocante arroz", "Azeite manjericão"] },
+            { p: "Peixe Cru", i: ["Peixe", "Redução tangerina", "Gochujang", "Pó hibisco", "Girassol tostada"] },
+            { p: "Peixe Água Chilli", i: ["Peixe", "Água chilli", "Vagem", "Cebola", "Coentro", "Quinoa frita"] },
+            { p: "Carne Crua", i: ["Carne", "Azeite funghi", "Pó cenoura", "Pó bottarga", "Picles pimenta"] },
+            { p: "Snack Fígado", i: ["Pão milho", "Patê fígado", "Laranja cubos", "Vagem", "Melado"] },
+            { p: "Repolho", i: ["Repolho grelhado", "Molho vôngole", "Amêndoa", "Laranja/Limão"] },
+            { p: "Lula", i: ["Lula", "Marinada gochujang", "Creme feijão"] }
+        ];
+
+        // CONTROLE DE TELAS
+        function alternarTela(tela) {
+            if (tela === 'checklist') {
+                document.getElementById('tela-estoque').classList.add('hidden');
+                document.getElementById('tela-checklist').classList.remove('hidden');
+                renderChecklist();
+            } else {
+                document.getElementById('tela-estoque').classList.remove('hidden');
+                document.getElementById('tela-checklist').classList.add('hidden');
+            }
+        }
+
+        // CONTROLE DE MODAIS
+        function abrirModal(id) { 
+            fecharModais(); 
+            document.getElementById(id).classList.add('modal-active'); 
+            if(id === 'modal-report') abrirRelatorio();
+            if(window.lucide) lucide.createIcons(); 
+        }
+        function fecharModais() { document.querySelectorAll('.modal-container').forEach(m => m.classList.remove('modal-active')); }
+
+        // CARREGAMENTO DO BANCO DE DADOS
+        async function loadData() {
+            try {
+                // Carrega Estoque
+                const { data: stock, error: sErr } = await supabaseClient.from('estoque_asu').select('*').order('nome');
+                if(!sErr) { currentStockData = stock || []; renderStockItems(); }
+
+                // Carrega Receitas (Restaurado)
+                const { data: recipes, error: rErr } = await supabaseClient.from('receitas_asu').select('*').order('nome');
+                if(!rErr) { receitasNuvem = recipes || []; atualizarSelectReceitas(); }
+
+                document.getElementById('status-cloud').innerHTML = '<span class="text-green-500 italic font-bold">● ASU Cloud On-line</span>';
+            } catch(e) { console.log(e); }
+        }
+
+        // ==========================
+        // FUNÇÕES DO ESTOQUE
+        // ==========================
+        function renderStockItems() {
+            const grid = document.getElementById('grid');
+            const search = (document.getElementById('search').value || '').toLowerCase();
+            grid.innerHTML = '';
+            
+            currentStockData.filter(i => String(i.nome).toLowerCase().includes(search)).forEach(item => {
+                const isCrit = (parseFloat(item.qtd)||0) <= (parseFloat(item.min)||2);
+                const nS = item.nome.replace(/'/g, "\\'");
+                grid.innerHTML += `
+                <div class="asu-card ${isCrit?'critical-alert':''}">
+                    <div class="flex justify-between items-center">
+                        <div class="w-2/3">
+                            <p class="text-[11px] font-black text-slate-400 uppercase truncate">${item.nome}</p>
+                            <p class="text-4xl font-black text-white leading-none">${item.qtd}<span class="text-xs text-slate-400 ml-1 uppercase">${item.unidade}</span></p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="updateStockItemQuantity('${nS}','${item.qtd}','sub','${item.unidade}')" class="w-12 h-12 bg-slate-700 rounded-2xl text-2xl text-white font-bold active:bg-slate-600">-</button>
+                            <button onclick="updateStockItemQuantity('${nS}','${item.qtd}','add','${item.unidade}')" class="w-12 h-12 bg-orange-600 rounded-2xl text-2xl text-white font-bold active:bg-orange-500">+</button>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex justify-between items-center">
+                        <div class="text-[9px] font-black text-slate-500 uppercase">Mín: ${item.min}</div>
+                        <button onclick="deleteStockItem('${nS}')" class="text-slate-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                </div>`;
+            });
+            if(window.lucide) lucide.createIcons();
+        }
+
+        async function updateStockItemQuantity(nome, qtdAtual, operacao, uni) {
+            const strValor = prompt(`Qtd a ${operacao === 'add' ? 'adicionar' : 'retirar'}:`);
+            const user = prompt("Quem está operando?");
+            if(!strValor || !user) return;
+            const valorNum = parseFloat(strValor.replace(',', '.'));
+            const novaQtd = Math.max(0, parseFloat((parseFloat(qtdAtual) + (operacao === 'add' ? valorNum : -valorNum)).toFixed(2)));
+            
+            const logNovo = `[${new Date().toLocaleDateString('pt-BR')} ${new Date().getHours()}:${new Date().getMinutes()}] ${user} ${operacao === 'add' ? 'Add' : 'Ret'} ${valorNum}${uni}`;
+            const item = currentStockData.find(i => i.nome === nome);
+            let logs = item.last_log ? String(item.last_log).split('|').slice(0,19) : [];
+            logs.unshift(logNovo);
+            
+            await supabaseClient.from('estoque_asu').update({ qtd: novaQtd, last_log: logs.join('|') }).eq('nome', nome);
+            loadData();
+        }
+
+        async function addNewStockItem() {
+            const nome = document.getElementById('add-nome').value.trim();
+            const qtd = parseFloat(document.getElementById('add-qtd').value);
+            const unidade = document.getElementById('add-unidade').value;
+            const min = parseFloat(document.getElementById('add-min').value) || 2; // QTD MÍNIMA RESTAURADA AQUI
+            
+            if(!nome || isNaN(qtd)) return alert("Preencha nome e quantidade");
+            const user = prompt("Quem está cadastrando?");
+            if(!user) return;
+            
+            await supabaseClient.from('estoque_asu').insert([{ nome, qtd, unidade, min, last_log: `[${new Date().toLocaleDateString('pt-BR')}] ${user} cadastrou.` }]);
+            fecharModais(); loadData();
+        }
+
+        async function deleteStockItem(nome) {
+            if(confirm(`Excluir ${nome}?`)) { await supabaseClient.from('estoque_asu').delete().eq('nome', nome); loadData(); }
+        }
+
+        function abrirRelatorio() {
+            const container = document.getElementById('report-content');
+            container.innerHTML = '';
+            let logs = [];
+            currentStockData.forEach(i => { if(i.last_log) String(i.last_log).split('|').forEach(l => logs.push({n: i.nome, t: l})); });
+            if(logs.length === 0) container.innerHTML = '<p class="text-slate-500 text-center text-xs mt-10">Vazio</p>';
+            logs.forEach(r => { container.innerHTML += `<div class="p-2 border border-slate-700 bg-slate-900 rounded-lg mb-2"><p class="text-[9px] text-slate-500 uppercase">${r.n}</p><p class="text-xs font-bold text-orange-400 italic">${r.t}</p></div>`; });
         }
 
         function gerarListaMise() {
+            abrirModal('modal-mise');
             const container = document.getElementById('mise-content');
             container.innerHTML = '';
             const itensBaixos = currentStockData.filter(i => (parseFloat(i.qtd)||0) <= (parseFloat(i.min)||2));
@@ -117,62 +304,129 @@
                     container.innerHTML += `<div class="mise-item"><p class="text-white font-black uppercase">${i.nome}</p><p class="text-red-400 text-[10px] font-bold">FALTA REPOR: ${i.qtd} ${i.unidade}</p></div>`;
                 });
             }
-            document.getElementById('modal-mise').classList.remove('hidden');
-            lucide.createIcons();
         }
 
-        async function addNewStockItem() {
-            const nome = document.getElementById('add-nome').value.trim();
-            const qtd = parseFloat(document.getElementById('add-qtd').value);
-            const unidade = document.getElementById('add-unidade').value;
-            const min = parseFloat(document.getElementById('add-min').value) || 2;
-            if(!nome || isNaN(qtd)) return;
-            const user = prompt("Quem está cadastrando?");
-            if(!user) return;
-            const { error } = await supabaseClient.from('estoque_asu').insert([{ nome, qtd, unidade, min, last_log: `[${new Date().toLocaleDateString('pt-BR')} 00:00] ${user} cadastrou o item.` }]);
-            if(!error) { document.getElementById('modal-add').classList.add('hidden'); loadStockData(); }
+        // ==========================
+        // FUNÇÕES DA CALCULADORA E RECEITAS (RESTAURADAS)
+        // ==========================
+        function atualizarSelectReceitas() {
+            const s = document.getElementById('select-receita');
+            if(receitasNuvem.length > 0) {
+                s.innerHTML = '<option value="">Escolha a receita...</option>' + receitasNuvem.map(r => `<option value="${r.id}">${r.nome.toUpperCase()}</option>`).join('');
+            } else {
+                s.innerHTML = '<option value="">Sem receitas no livro</option>';
+            }
+            alternarBotoesReceita();
         }
 
-        async function updateStockItemQuantity(nome, qtdAtual, operacao, uni) {
-            const strValor = prompt(`Qtd a ${operacao === 'add' ? 'adicionar' : 'retirar'} em ${nome}:`);
-            const user = prompt("Seu nome:");
-            if(!strValor || !user) return;
-            const valorNum = parseFloat(strValor.replace(',', '.'));
-            const novaQtd = Math.max(0, parseFloat((parseFloat(qtdAtual) + (operacao === 'add' ? valorNum : -valorNum)).toFixed(2)));
-            const logNovo = `[${new Date().toLocaleDateString('pt-BR')} ${new Date().getHours()}:${new Date().getMinutes()}] ${user} ${operacao === 'add' ? 'Add' : 'Ret'} ${valorNum}${uni}`;
-            const item = currentStockData.find(i => i.nome === nome);
-            let logs = item.last_log ? String(item.last_log).split('|').slice(0,19) : [];
-            logs.unshift(logNovo);
-            await supabaseClient.from('estoque_asu').update({ qtd: novaQtd, last_log: logs.join('|') }).eq('nome', nome);
-            loadStockData();
+        function alternarBotoesReceita() {
+            const id = document.getElementById('select-receita').value;
+            document.getElementById('btn-edit').classList.toggle('hidden', !id);
+            document.getElementById('btn-del').classList.toggle('hidden', !id);
         }
 
-        async function deleteStockItem(nome) {
-            if(confirm(`Excluir ${nome}?`)) { await supabaseClient.from('estoque_asu').delete().eq('nome', nome); loadStockData(); }
+        function abrirNovaReceita() {
+            document.getElementById('rec-titulo').innerText = "Nova Receita";
+            document.getElementById('edit-id-receita').value = "";
+            document.getElementById('receita-nome').value = "";
+            document.getElementById('receita-base').value = "";
+            document.getElementById('ingredientes-container').innerHTML = "";
+            adicionarLinhaIngrediente();
+            document.getElementById('modal-nova-receita').classList.add('modal-active');
         }
 
-        function abrirRelatorio() {
-            const container = document.getElementById('report-content');
-            container.innerHTML = '';
-            let logs = [];
-            currentStockData.forEach(i => { if(i.last_log) String(i.last_log).split('|').forEach(l => logs.push({n: i.nome, t: l})); });
-            logs.forEach(r => { container.innerHTML += `<div class="p-2 border border-slate-700 bg-slate-900 rounded-lg mb-2"><p class="text-[9px] text-slate-500 uppercase">${r.n}</p><p class="text-xs font-bold text-orange-400">${r.t}</p></div>`; });
-            document.getElementById('modal-report').classList.remove('hidden');
-        }
+        function prepararEdicaoReceita() {
+            const id = document.getElementById('select-receita').value;
+            const rec = receitasNuvem.find(r => r.id == id);
+            if(!rec) return;
 
-        function renderStockItems() {
-            const grid = document.getElementById('grid');
-            const search = (document.getElementById('search').value || '').toLowerCase();
-            grid.innerHTML = '';
-            currentStockData.filter(i => String(i.nome).toLowerCase().includes(search)).forEach(item => {
-                const isCrit = (parseFloat(item.qtd)||0) <= (parseFloat(item.min)||2);
-                grid.innerHTML += `<div class="asu-card ${isCrit?'critical-alert':''}"><div class="flex justify-between items-center"><div class="w-2/3"><p class="text-[11px] font-black text-slate-400 uppercase truncate">${item.nome}</p><p class="text-4xl font-black text-white leading-none">${item.qtd}<span class="text-xs text-slate-400 ml-1 uppercase">${item.unidade}</span></p></div><div class="flex gap-2"><button onclick="updateStockItemQuantity('${item.nome}','${item.qtd}','sub','${item.unidade}')" class="w-12 h-12 bg-slate-700 rounded-2xl text-2xl text-white font-bold">-</button><button onclick="updateStockItemQuantity('${item.nome}','${item.qtd}','add','${item.unidade}')" class="w-12 h-12 bg-orange-600 rounded-2xl text-2xl text-white font-bold">+</button></div></div><div class="mt-4 flex justify-between items-center"><div class="text-[9px] font-black text-slate-500 uppercase">Mín: ${item.min}</div><button onclick="deleteStockItem('${item.nome}')" class="text-slate-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`;
+            document.getElementById('rec-titulo').innerText = "Editar Receita";
+            document.getElementById('edit-id-receita').value = rec.id;
+            document.getElementById('receita-nome').value = rec.nome;
+            document.getElementById('receita-base').value = rec.base;
+            
+            const container = document.getElementById('ingredientes-container');
+            container.innerHTML = "";
+            rec.ingredientes.forEach(ing => {
+                const d = document.createElement('div');
+                d.className = 'flex gap-1 ingrediente-row mb-1';
+                d.innerHTML = `<input type="text" value="${ing.i}" class="w-1/2 bg-slate-950 p-2 rounded-lg text-[10px] text-white border border-slate-700 uppercase outline-none"><input type="number" value="${ing.q}" class="w-1/4 bg-slate-950 p-2 rounded-lg text-[10px] text-white border border-slate-700 outline-none"><input type="text" value="${ing.u}" class="w-1/4 bg-slate-950 p-2 rounded-lg text-[10px] text-white border border-slate-700 uppercase outline-none">`;
+                container.appendChild(d);
             });
-            lucide.createIcons();
+            document.getElementById('modal-nova-receita').classList.add('modal-active');
         }
 
-        window.onload = loadStockData;
-        setInterval(loadStockData, 5000);
+        async function salvarReceitaNuvem() {
+            const editId = document.getElementById('edit-id-receita').value;
+            const nome = document.getElementById('receita-nome').value.trim();
+            const base = parseFloat(document.getElementById('receita-base').value);
+            if (!nome || !base) return alert("Preencha o nome e a base!");
+
+            const ingredientes = [];
+            document.querySelectorAll('.ingrediente-row').forEach(row => {
+                const c = row.querySelectorAll('input');
+                if (c[0].value) ingredientes.push({ i: c[0].value, q: parseFloat(c[1].value), u: c[2].value });
+            });
+
+            if(editId) {
+                await supabaseClient.from('receitas_asu').update({ nome, base, ingredientes }).eq('id', editId);
+            } else {
+                await supabaseClient.from('receitas_asu').insert([{ nome, base, ingredientes }]);
+            }
+
+            document.getElementById('modal-nova-receita').classList.remove('modal-active');
+            loadData();
+        }
+
+        async function excluirReceita() {
+            const id = document.getElementById('select-receita').value;
+            if(confirm("Excluir receita?")) {
+                await supabaseClient.from('receitas_asu').delete().eq('id', id);
+                loadData();
+            }
+        }
+
+        function adicionarLinhaIngrediente() {
+            const c = document.getElementById('ingredientes-container');
+            const d = document.createElement('div'); d.className = 'flex gap-1 ingrediente-row mb-1';
+            d.innerHTML = `<input type="text" placeholder="Item" class="w-1/2 bg-slate-950 p-2 rounded-lg text-[10px] text-white border border-slate-700 uppercase outline-none"><input type="number" placeholder="Qtd" class="w-1/4 bg-slate-950 p-2 rounded-lg text-[10px] text-white border border-slate-700 outline-none"><input type="text" placeholder="Uni" class="w-1/4 bg-slate-950 p-2 rounded-lg text-[10px] text-white border border-slate-700 uppercase outline-none">`;
+            c.appendChild(d);
+        }
+
+        function calcularProducao() {
+            const id = document.getElementById('select-receita').value;
+            const fator = parseFloat(document.getElementById('calc-fator').value) || 0;
+            const rec = receitasNuvem.find(r => r.id == id);
+            if(!rec) return alert("Selecione a receita");
+            const multi = fator / rec.base;
+            document.getElementById('lista-necessidade').innerHTML = rec.ingredientes.map(ing => `<div class="flex justify-between border-b border-black/5 pb-1 font-bold"><span>• ${ing.i}:</span> <span class="text-indigo-600">${(ing.q * multi).toFixed(2)} ${ing.u}</span></div>`).join('');
+            document.getElementById('resultado-calc').classList.remove('hidden');
+        }
+
+        // ==========================
+        // FUNÇÕES DO CHECKLIST CHEF
+        // ==========================
+        function renderChecklist() {
+            const cont = document.getElementById('checklist-content');
+            if(cont.innerHTML.trim() !== "") return; 
+            pratosChef.forEach(dish => {
+                let h = `<div class="dish-card"><h3 class="text-orange-500 font-black italic uppercase text-xs mb-2 border-b border-slate-700 pb-1">${dish.p}</h3>`;
+                dish.i.forEach(ing => {
+                    h += `<label class="item-check" onclick="this.classList.toggle('done')"><input type="checkbox"><span class="text-xs font-bold text-slate-200 uppercase">${ing}</span></label>`;
+                });
+                h += `</div>`;
+                cont.innerHTML += h;
+            });
+        }
+
+        function resetChecklist() { 
+            const cont = document.getElementById('checklist-content');
+            cont.innerHTML = '';
+            renderChecklist();
+        }
+
+        window.onload = loadData;
+        setInterval(loadData, 15000);
     </script>
 </body>
 </html>
