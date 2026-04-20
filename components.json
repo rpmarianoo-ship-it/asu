@@ -1,0 +1,263 @@
+"""MISE MANAGER backend API tests"""
+import os
+import pytest
+import requests
+from datetime import datetime, timezone
+
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://mise-manager-2.preview.emergentagent.com").rstrip("/")
+API = f"{BASE_URL}/api"
+
+
+@pytest.fixture(scope="module")
+def session():
+    s = requests.Session()
+    s.headers.update({"Content-Type": "application/json"})
+    return s
+
+
+@pytest.fixture(scope="module")
+def created():
+    return {"insumos": [], "fichas": [], "vendas": [], "perdas": [], "cmv": []}
+
+
+# ---- Health ----
+def test_root(session):
+    r = session.get(f"{API}/")
+    assert r.status_code == 200
+    assert r.json().get("status") == "ok"
+
+
+# ---- Insumos: create + FC calc ----
+def test_create_insumo_calc_fc(session, created):
+    payload = {
+        "nome": "TEST_Tomate",
+        "categoria": "Hortifruti",
+        "unidade_compra": "kg",
+        "unidade_uso": "g",
+        "fator_conversao": 1000.0,
+        "peso_bruto": 1.0,
+        "peso_liquido": 0.8,
+        "preco": 10.0,
+        "estoque_atual": 5000,
+        "estoque_minimo": 1000,
+    }
+    r = session.post(f"{API}/insumos", json=payload)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["nome"] == "TEST_Tomate"
+    assert abs(d["fator_correcao"] - 1.25) < 0.001  # 1.0/0.8
+    # custo_por_unidade_uso = (10/0.8)/1000 = 0.0125
+    assert abs(d["custo_por_unidade_uso"] - 0.0125) < 1e-4
+    created["insumos"].append(d["id"])
+
+
+def test_create_insumo_2(session, created):
+    payload = {
+        "nome": "TEST_Cebola",
+        "unidade_compra": "kg", "unidade_uso": "g", "fator_conversao": 1000.0,
+        "peso_bruto": 1.0, "peso_liquido": 0.9, "preco": 5.0,
+        "estoque_atual": 2000, "estoque_minimo": 500,
+    }
+    r = session.post(f"{API}/insumos", json=payload)
+    assert r.status_code == 200
+    created["insumos"].append(r.json()["id"])
+
+
+def test_list_insumos(session, created):
+    r = session.get(f"{API}/insumos")
+    assert r.status_code == 200
+    ids = [i["id"] for i in r.json()]
+    for cid in created["insumos"]:
+        assert cid in ids
+
+
+def test_update_insumo(session, created):
+    iid = created["insumos"][0]
+    payload = {
+        "nome": "TEST_Tomate", "unidade_compra": "kg", "unidade_uso": "g",
+        "fator_conversao": 1000.0, "peso_bruto": 1.0, "peso_liquido": 0.8,
+        "preco": 20.0,  # double price
+        "estoque_atual": 5000, "estoque_minimo": 1000,
+    }
+    r = session.put(f"{API}/insumos/{iid}", json=payload)
+    assert r.status_code == 200
+    d = r.json()
+    assert abs(d["custo_por_unidade_uso"] - 0.025) < 1e-4
+
+
+# ---- Fichas: sub-receita + ficha usando sub ----
+def test_create_sub_receita(session, created):
+    payload = {
+        "nome": "TEST_Molho_Base",
+        "categoria": "Sub-receita",
+        "eh_sub_receita": True,
+        "rendimento_bruto": 1000.0,
+        "rendimento_liquido": 900.0,
+        "unidade_rendimento": "g",
+        "porcoes": 1,
+        "ingredientes": [
+            {"tipo": "insumo", "ref_id": created["insumos"][0], "nome": "", "quantidade": 200, "unidade": "g", "custo_unitario": 0},
+            {"tipo": "insumo", "ref_id": created["insumos"][1], "nome": "", "quantidade": 100, "unidade": "g", "custo_unitario": 0},
+        ],
+    }
+    r = session.post(f"{API}/fichas", json=payload)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    # tomate updated to 0.025/g * 200 = 5.0; cebola 0.005/g (5/0.9/1000 ~ 0.005556) * 100 = 0.5556
+    expected = 0.025 * 200 + (5.0 / 0.9 / 1000) * 100
+    assert abs(d["custo_total"] - round(expected, 4)) < 0.01
+    created["fichas"].append(d["id"])
+    created["sub_id"] = d["id"]
+
+
+def test_create_ficha_using_sub(session, created):
+    payload = {
+        "nome": "TEST_Prato_Principal",
+        "categoria": "Prato",
+        "eh_sub_receita": False,
+        "rendimento_bruto": 1.0, "rendimento_liquido": 1.0,
+        "unidade_rendimento": "porcao", "porcoes": 4,
+        "impostos_pct": 6.0, "cartao_pct": 3.5, "delivery_pct": 0,
+        "outras_taxas_pct": 0, "lucro_desejado_pct": 30.0,
+        "ingredientes": [
+            {"tipo": "ficha", "ref_id": created["sub_id"], "nome": "", "quantidade": 300, "unidade": "g", "custo_unitario": 0},
+            {"tipo": "insumo", "ref_id": created["insumos"][0], "nome": "", "quantidade": 100, "unidade": "g", "custo_unitario": 0},
+        ],
+    }
+    r = session.post(f"{API}/fichas", json=payload)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    # custo_total should be > 0 and preco_venda computed via markup divisor
+    assert d["custo_total"] > 0
+    assert d["preco_venda"] > d["custo_por_porcao"]
+    # markup divisor = 1 - 0.395 = 0.605; preco = custo/0.605
+    expected_preco = d["custo_por_porcao"] / 0.605
+    assert abs(d["preco_venda"] - round(expected_preco, 2)) < 0.05
+    created["fichas"].append(d["id"])
+    created["ficha_main_id"] = d["id"]
+
+
+def test_propagation_on_insumo_update(session, created):
+    """When insumo price changes, fichas using it must recalc."""
+    # capture current
+    fid = created["ficha_main_id"]
+    r0 = session.get(f"{API}/fichas/{fid}")
+    custo_before = r0.json()["custo_total"]
+
+    iid = created["insumos"][0]
+    payload = {
+        "nome": "TEST_Tomate", "unidade_compra": "kg", "unidade_uso": "g",
+        "fator_conversao": 1000.0, "peso_bruto": 1.0, "peso_liquido": 0.8,
+        "preco": 40.0,  # double again
+        "estoque_atual": 5000, "estoque_minimo": 1000,
+    }
+    r = session.put(f"{API}/insumos/{iid}", json=payload)
+    assert r.status_code == 200
+
+    r1 = session.get(f"{API}/fichas/{fid}")
+    custo_after = r1.json()["custo_total"]
+    assert custo_after > custo_before, f"Cost should propagate; before={custo_before} after={custo_after}"
+
+
+# ---- Vendas ----
+def test_create_venda(session, created):
+    payload = {"ficha_id": created["ficha_main_id"], "quantidade": 3}
+    r = session.post(f"{API}/vendas", json=payload)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["quantidade"] == 3
+    assert d["preco_unitario"] > 0
+    assert abs(d["total"] - round(d["preco_unitario"] * 3, 2)) < 0.01
+    created["vendas"].append(d["id"])
+
+
+def test_create_venda2(session, created):
+    payload = {"ficha_id": created["ficha_main_id"], "quantidade": 5}
+    r = session.post(f"{API}/vendas", json=payload)
+    assert r.status_code == 200
+    created["vendas"].append(r.json()["id"])
+
+
+def test_list_vendas(session):
+    r = session.get(f"{API}/vendas")
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
+
+
+# ---- Perdas ----
+def test_create_perda(session, created):
+    payload = {"insumo_id": created["insumos"][0], "quantidade": 50, "unidade": "g", "motivo": "validade"}
+    r = session.post(f"{API}/perdas", json=payload)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["custo_total"] > 0
+    created["perdas"].append(d["id"])
+
+
+# ---- CMV ----
+def test_create_cmv(session, created):
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    payload = {
+        "periodo": today[:7],
+        "data_inicio": "2020-01-01",
+        "data_fim": today,
+        "estoque_inicial": 1000.0,
+        "compras": 500.0,
+        "estoque_final": 800.0,
+        "observacoes": "TEST"
+    }
+    r = session.post(f"{API}/cmv", json=payload)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["cmv_real"] == 700.0
+    assert d["vendas_total"] > 0  # vendas exist within range
+    created["cmv"].append(d["id"])
+
+
+# ---- Dashboard ----
+def test_dashboard_kpis(session):
+    r = session.get(f"{API}/dashboard/kpis")
+    assert r.status_code == 200
+    d = r.json()
+    for key in ["total_insumos", "total_fichas", "receita_total", "lucro_bruto", "ticket_medio", "qtd_vendas", "perdas_total"]:
+        assert key in d
+    assert d["receita_total"] > 0
+    assert d["qtd_vendas"] >= 8
+
+
+def test_dashboard_vendas_por_ficha(session):
+    r = session.get(f"{API}/dashboard/vendas-por-ficha")
+    assert r.status_code == 200
+    arr = r.json()
+    assert isinstance(arr, list) and len(arr) >= 1
+    assert "receita" in arr[0] and "lucro" in arr[0]
+
+
+def test_dashboard_bcg(session):
+    r = session.get(f"{API}/dashboard/bcg")
+    assert r.status_code == 200
+    d = r.json()
+    assert "items" in d and "qtd_media" in d and "margem_media" in d
+
+
+def test_dashboard_curva_abc(session):
+    r = session.get(f"{API}/dashboard/curva-abc")
+    assert r.status_code == 200
+    arr = r.json()
+    assert isinstance(arr, list)
+    if arr:
+        assert "classe" in arr[0] and arr[0]["classe"] in ("A", "B", "C")
+
+
+# ---- Cleanup ----
+def test_zz_cleanup(session, created):
+    for vid in created["vendas"]:
+        session.delete(f"{API}/vendas/{vid}")
+    for pid in created["perdas"]:
+        session.delete(f"{API}/perdas/{pid}")
+    for cid in created["cmv"]:
+        session.delete(f"{API}/cmv/{cid}")
+    for fid in created["fichas"]:
+        session.delete(f"{API}/fichas/{fid}")
+    for iid in created["insumos"]:
+        session.delete(f"{API}/insumos/{iid}")

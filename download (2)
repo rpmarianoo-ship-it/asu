@@ -1,0 +1,646 @@
+from fastapi import FastAPI, APIRouter, HTTPException
+from dotenv import load_dotenv
+from starlette.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
+import os
+import logging
+from pathlib import Path
+from pydantic import BaseModel, Field
+from typing import List, Optional, Literal
+import uuid
+from datetime import datetime, timezone
+
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / '.env')
+
+mongo_url = os.environ['MONGO_URL']
+client = AsyncIOMotorClient(mongo_url)
+db = client[os.environ['DB_NAME']]
+
+app = FastAPI(title="MISE MANAGER API")
+api_router = APIRouter(prefix="/api")
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+# ============ MODELS ============
+
+class IngredienteFicha(BaseModel):
+    # ref to insumo OR sub-ficha
+    tipo: Literal["insumo", "ficha"] = "insumo"
+    ref_id: str
+    nome: str = ""
+    quantidade: float  # quantidade usada
+    unidade: str = "g"  # g, kg, ml, l, un
+    custo_unitario: float = 0.0  # snapshot at add time (recomputed on read)
+
+
+class Insumo(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    nome: str
+    categoria: str = "Geral"
+    unidade_compra: str = "kg"  # kg, l, un, fardo
+    unidade_uso: str = "g"      # g, ml, un
+    fator_conversao: float = 1000.0  # 1 kg = 1000 g
+    peso_bruto: float = 0.0   # compra (unidade_compra)
+    peso_liquido: float = 0.0  # limpo/aproveitado (unidade_compra)
+    preco: float = 0.0         # preço pago por peso_bruto (unidade_compra)
+    fator_correcao: float = 1.0  # calc: bruto/liquido
+    custo_por_unidade_uso: float = 0.0  # calc: (preco / peso_liquido) / fator_conversao
+    estoque_atual: float = 0.0  # em unidade_uso
+    estoque_minimo: float = 0.0  # em unidade_uso
+    fornecedor: str = ""
+    observacoes: str = ""
+    created_at: str = Field(default_factory=now_iso)
+    updated_at: str = Field(default_factory=now_iso)
+
+
+class InsumoCreate(BaseModel):
+    nome: str
+    categoria: str = "Geral"
+    unidade_compra: str = "kg"
+    unidade_uso: str = "g"
+    fator_conversao: float = 1000.0
+    peso_bruto: float = 0.0
+    peso_liquido: float = 0.0
+    preco: float = 0.0
+    estoque_atual: float = 0.0
+    estoque_minimo: float = 0.0
+    fornecedor: str = ""
+    observacoes: str = ""
+
+
+class Ficha(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    nome: str
+    categoria: str = "Prato"  # Prato, Sub-receita/Base, Sobremesa, etc
+    eh_sub_receita: bool = False
+    ingredientes: List[IngredienteFicha] = []
+    rendimento_bruto: float = 1.0     # antes cocção (em unidade_rend)
+    rendimento_liquido: float = 1.0   # depois cocção (em unidade_rend)
+    unidade_rendimento: str = "porcao"  # porcao, g, ml
+    porcoes: int = 1
+    indice_rendimento: float = 1.0   # rendimento_liquido/rendimento_bruto
+    tempo_preparo_min: int = 0
+    modo_preparo: str = ""
+    custo_total: float = 0.0   # soma ingredientes
+    custo_por_porcao: float = 0.0
+    # Precificação
+    impostos_pct: float = 6.0       # Simples Nacional
+    cartao_pct: float = 3.5
+    delivery_pct: float = 0.0
+    outras_taxas_pct: float = 0.0
+    lucro_desejado_pct: float = 30.0
+    preco_venda: float = 0.0
+    margem_contribuicao_rs: float = 0.0
+    margem_contribuicao_pct: float = 0.0
+    foto_url: str = ""
+    created_at: str = Field(default_factory=now_iso)
+    updated_at: str = Field(default_factory=now_iso)
+
+
+class FichaCreate(BaseModel):
+    nome: str
+    categoria: str = "Prato"
+    eh_sub_receita: bool = False
+    ingredientes: List[IngredienteFicha] = []
+    rendimento_bruto: float = 1.0
+    rendimento_liquido: float = 1.0
+    unidade_rendimento: str = "porcao"
+    porcoes: int = 1
+    tempo_preparo_min: int = 0
+    modo_preparo: str = ""
+    impostos_pct: float = 6.0
+    cartao_pct: float = 3.5
+    delivery_pct: float = 0.0
+    outras_taxas_pct: float = 0.0
+    lucro_desejado_pct: float = 30.0
+    foto_url: str = ""
+
+
+class Venda(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    ficha_id: str
+    ficha_nome: str = ""
+    quantidade: int = 1
+    preco_unitario: float = 0.0
+    custo_unitario: float = 0.0
+    total: float = 0.0
+    data: str = Field(default_factory=now_iso)
+    observacoes: str = ""
+
+
+class VendaCreate(BaseModel):
+    ficha_id: str
+    quantidade: int = 1
+    preco_unitario: Optional[float] = None  # se None, usar preço ficha
+    data: Optional[str] = None
+    observacoes: str = ""
+
+
+class Perda(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    insumo_id: str
+    insumo_nome: str = ""
+    quantidade: float
+    unidade: str = "g"
+    motivo: Literal["preparo", "validade", "devolucao", "queima", "outros"] = "preparo"
+    custo_total: float = 0.0
+    data: str = Field(default_factory=now_iso)
+    observacoes: str = ""
+
+
+class PerdaCreate(BaseModel):
+    insumo_id: str
+    quantidade: float
+    unidade: str = "g"
+    motivo: Literal["preparo", "validade", "devolucao", "queima", "outros"] = "preparo"
+    data: Optional[str] = None
+    observacoes: str = ""
+
+
+class FechamentoCMV(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    periodo: str  # YYYY-MM
+    data_inicio: str
+    data_fim: str
+    estoque_inicial: float
+    compras: float
+    estoque_final: float
+    cmv_real: float = 0.0       # estoque_inicial + compras - estoque_final
+    vendas_total: float = 0.0    # soma vendas do período
+    cmv_teorico: float = 0.0     # soma custos das vendas
+    cmv_real_pct: float = 0.0    # cmv_real / vendas_total
+    cmv_teorico_pct: float = 0.0
+    desvio: float = 0.0         # cmv_real - cmv_teorico
+    desvio_pct: float = 0.0
+    observacoes: str = ""
+    created_at: str = Field(default_factory=now_iso)
+
+
+class FechamentoCreate(BaseModel):
+    periodo: str
+    data_inicio: str
+    data_fim: str
+    estoque_inicial: float
+    compras: float
+    estoque_final: float
+    observacoes: str = ""
+
+
+# ============ HELPERS ============
+
+def calc_insumo(i: dict) -> dict:
+    """Calcula FC e custo por unidade de uso."""
+    pb = float(i.get("peso_bruto") or 0)
+    pl = float(i.get("peso_liquido") or 0)
+    preco = float(i.get("preco") or 0)
+    fc_conv = float(i.get("fator_conversao") or 1)
+    i["fator_correcao"] = round(pb / pl, 4) if pl > 0 else 1.0
+    if pl > 0 and fc_conv > 0:
+        # custo por 1 unid_compra líquida / fator_conversao
+        i["custo_por_unidade_uso"] = round((preco / pl) / fc_conv, 6)
+    else:
+        i["custo_por_unidade_uso"] = 0.0
+    return i
+
+
+async def get_custo_ingrediente(ing: dict) -> float:
+    """Retorna custo total do ingrediente na quantidade informada."""
+    qtd = float(ing.get("quantidade") or 0)
+    if ing.get("tipo") == "ficha":
+        sub = await db.fichas.find_one({"id": ing["ref_id"]}, {"_id": 0})
+        if not sub:
+            return 0.0
+        # custo por unidade do rendimento líquido da sub-receita
+        rend = float(sub.get("rendimento_liquido") or 1.0)
+        custo_sub = float(sub.get("custo_total") or 0.0)
+        custo_por_unid = custo_sub / rend if rend > 0 else 0.0
+        return round(custo_por_unid * qtd, 4)
+    ins = await db.insumos.find_one({"id": ing["ref_id"]}, {"_id": 0})
+    if not ins:
+        return 0.0
+    custo_unit = float(ins.get("custo_por_unidade_uso") or 0.0)
+    return round(custo_unit * qtd, 4)
+
+
+async def recalc_ficha(f: dict) -> dict:
+    total = 0.0
+    new_ings = []
+    for ing in f.get("ingredientes", []):
+        custo = await get_custo_ingrediente(ing)
+        # snapshot nome
+        if ing.get("tipo") == "ficha":
+            doc = await db.fichas.find_one({"id": ing["ref_id"]}, {"_id": 0, "nome": 1})
+        else:
+            doc = await db.insumos.find_one({"id": ing["ref_id"]}, {"_id": 0, "nome": 1, "unidade_uso": 1})
+        if doc:
+            ing["nome"] = doc.get("nome", ing.get("nome", ""))
+        ing["custo_unitario"] = round(custo / (ing.get("quantidade") or 1), 6) if ing.get("quantidade") else 0.0
+        new_ings.append(ing)
+        total += custo
+    f["ingredientes"] = new_ings
+    f["custo_total"] = round(total, 4)
+    porcoes = int(f.get("porcoes") or 1)
+    f["custo_por_porcao"] = round(total / porcoes, 4) if porcoes > 0 else total
+    rb = float(f.get("rendimento_bruto") or 1)
+    rl = float(f.get("rendimento_liquido") or 1)
+    f["indice_rendimento"] = round(rl / rb, 4) if rb > 0 else 1.0
+
+    # Markup divisor
+    imp = float(f.get("impostos_pct") or 0)
+    cart = float(f.get("cartao_pct") or 0)
+    deliv = float(f.get("delivery_pct") or 0)
+    out = float(f.get("outras_taxas_pct") or 0)
+    lucro = float(f.get("lucro_desejado_pct") or 0)
+    soma_pct = imp + cart + deliv + out + lucro
+    markup_div = 1 - (soma_pct / 100.0)
+    custo_porc = f["custo_por_porcao"]
+    if markup_div > 0:
+        preco = custo_porc / markup_div
+    else:
+        preco = custo_porc
+    f["preco_venda"] = round(preco, 2)
+    # margem de contribuição (preço - custo - taxas variáveis)
+    taxas_var = preco * ((imp + cart + deliv + out) / 100.0)
+    mc_rs = preco - custo_porc - taxas_var
+    f["margem_contribuicao_rs"] = round(mc_rs, 2)
+    f["margem_contribuicao_pct"] = round((mc_rs / preco * 100), 2) if preco > 0 else 0.0
+    return f
+
+
+async def propagate_ficha_updates(insumo_id: str | None = None, ficha_id: str | None = None):
+    """Recalcula fichas que usem esse insumo ou sub-ficha."""
+    query = {}
+    if insumo_id:
+        query = {"ingredientes.ref_id": insumo_id, "ingredientes.tipo": "insumo"}
+    elif ficha_id:
+        query = {"ingredientes.ref_id": ficha_id, "ingredientes.tipo": "ficha"}
+    else:
+        return
+    fichas = await db.fichas.find(query, {"_id": 0}).to_list(500)
+    for f in fichas:
+        f = await recalc_ficha(f)
+        f["updated_at"] = now_iso()
+        await db.fichas.update_one({"id": f["id"]}, {"$set": f})
+        # cascade: se esta ficha é sub-receita, repropagar
+        if f.get("eh_sub_receita"):
+            await propagate_ficha_updates(ficha_id=f["id"])
+
+
+# ============ INSUMOS ============
+
+@api_router.get("/insumos", response_model=List[Insumo])
+async def list_insumos():
+    items = await db.insumos.find({}, {"_id": 0}).sort("nome", 1).to_list(2000)
+    return items
+
+
+@api_router.post("/insumos", response_model=Insumo)
+async def create_insumo(data: InsumoCreate):
+    obj = Insumo(**data.model_dump()).model_dump()
+    obj = calc_insumo(obj)
+    await db.insumos.insert_one(obj.copy())
+    return obj
+
+
+@api_router.put("/insumos/{insumo_id}", response_model=Insumo)
+async def update_insumo(insumo_id: str, data: InsumoCreate):
+    existing = await db.insumos.find_one({"id": insumo_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Insumo não encontrado")
+    existing.update(data.model_dump())
+    existing["updated_at"] = now_iso()
+    existing = calc_insumo(existing)
+    await db.insumos.update_one({"id": insumo_id}, {"$set": existing})
+    await propagate_ficha_updates(insumo_id=insumo_id)
+    return existing
+
+
+@api_router.delete("/insumos/{insumo_id}")
+async def delete_insumo(insumo_id: str):
+    r = await db.insumos.delete_one({"id": insumo_id})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "Insumo não encontrado")
+    return {"ok": True}
+
+
+# ============ FICHAS ============
+
+@api_router.get("/fichas", response_model=List[Ficha])
+async def list_fichas():
+    items = await db.fichas.find({}, {"_id": 0}).sort("nome", 1).to_list(2000)
+    return items
+
+
+@api_router.get("/fichas/{ficha_id}", response_model=Ficha)
+async def get_ficha(ficha_id: str):
+    f = await db.fichas.find_one({"id": ficha_id}, {"_id": 0})
+    if not f:
+        raise HTTPException(404, "Ficha não encontrada")
+    return f
+
+
+@api_router.post("/fichas", response_model=Ficha)
+async def create_ficha(data: FichaCreate):
+    obj = Ficha(**data.model_dump()).model_dump()
+    obj = await recalc_ficha(obj)
+    await db.fichas.insert_one(obj.copy())
+    return obj
+
+
+@api_router.put("/fichas/{ficha_id}", response_model=Ficha)
+async def update_ficha(ficha_id: str, data: FichaCreate):
+    existing = await db.fichas.find_one({"id": ficha_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Ficha não encontrada")
+    existing.update(data.model_dump())
+    existing["updated_at"] = now_iso()
+    existing = await recalc_ficha(existing)
+    await db.fichas.update_one({"id": ficha_id}, {"$set": existing})
+    await propagate_ficha_updates(ficha_id=ficha_id)
+    return existing
+
+
+@api_router.delete("/fichas/{ficha_id}")
+async def delete_ficha(ficha_id: str):
+    r = await db.fichas.delete_one({"id": ficha_id})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "Ficha não encontrada")
+    return {"ok": True}
+
+
+# ============ VENDAS ============
+
+@api_router.get("/vendas", response_model=List[Venda])
+async def list_vendas():
+    items = await db.vendas.find({}, {"_id": 0}).sort("data", -1).to_list(5000)
+    return items
+
+
+@api_router.post("/vendas", response_model=Venda)
+async def create_venda(data: VendaCreate):
+    f = await db.fichas.find_one({"id": data.ficha_id}, {"_id": 0})
+    if not f:
+        raise HTTPException(404, "Ficha não encontrada")
+    preco = data.preco_unitario if data.preco_unitario is not None else float(f.get("preco_venda") or 0)
+    custo = float(f.get("custo_por_porcao") or 0)
+    v = Venda(
+        ficha_id=data.ficha_id,
+        ficha_nome=f.get("nome", ""),
+        quantidade=data.quantidade,
+        preco_unitario=preco,
+        custo_unitario=custo,
+        total=round(preco * data.quantidade, 2),
+        data=data.data or now_iso(),
+        observacoes=data.observacoes,
+    ).model_dump()
+    await db.vendas.insert_one(v.copy())
+    return v
+
+
+@api_router.delete("/vendas/{venda_id}")
+async def delete_venda(venda_id: str):
+    r = await db.vendas.delete_one({"id": venda_id})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "Venda não encontrada")
+    return {"ok": True}
+
+
+# ============ PERDAS ============
+
+@api_router.get("/perdas", response_model=List[Perda])
+async def list_perdas():
+    items = await db.perdas.find({}, {"_id": 0}).sort("data", -1).to_list(5000)
+    return items
+
+
+@api_router.post("/perdas", response_model=Perda)
+async def create_perda(data: PerdaCreate):
+    ins = await db.insumos.find_one({"id": data.insumo_id}, {"_id": 0})
+    if not ins:
+        raise HTTPException(404, "Insumo não encontrado")
+    custo_unit = float(ins.get("custo_por_unidade_uso") or 0)
+    custo_total = round(custo_unit * data.quantidade, 2)
+    p = Perda(
+        insumo_id=data.insumo_id,
+        insumo_nome=ins.get("nome", ""),
+        quantidade=data.quantidade,
+        unidade=data.unidade or ins.get("unidade_uso", "g"),
+        motivo=data.motivo,
+        custo_total=custo_total,
+        data=data.data or now_iso(),
+        observacoes=data.observacoes,
+    ).model_dump()
+    await db.perdas.insert_one(p.copy())
+    return p
+
+
+@api_router.delete("/perdas/{perda_id}")
+async def delete_perda(perda_id: str):
+    r = await db.perdas.delete_one({"id": perda_id})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "Perda não encontrada")
+    return {"ok": True}
+
+
+# ============ CMV ============
+
+@api_router.get("/cmv", response_model=List[FechamentoCMV])
+async def list_cmv():
+    items = await db.cmv.find({}, {"_id": 0}).sort("periodo", -1).to_list(500)
+    return items
+
+
+@api_router.post("/cmv", response_model=FechamentoCMV)
+async def create_cmv(data: FechamentoCreate):
+    # CMV Real
+    cmv_real = data.estoque_inicial + data.compras - data.estoque_final
+    # Vendas do período
+    vendas = await db.vendas.find({
+        "data": {"$gte": data.data_inicio, "$lte": data.data_fim + "T23:59:59"}
+    }, {"_id": 0}).to_list(10000)
+    vendas_total = sum(float(v.get("total") or 0) for v in vendas)
+    cmv_teorico = sum(float(v.get("custo_unitario") or 0) * int(v.get("quantidade") or 0) for v in vendas)
+    cmv_real_pct = (cmv_real / vendas_total * 100) if vendas_total > 0 else 0.0
+    cmv_teorico_pct = (cmv_teorico / vendas_total * 100) if vendas_total > 0 else 0.0
+    desvio = cmv_real - cmv_teorico
+    desvio_pct = cmv_real_pct - cmv_teorico_pct
+
+    obj = FechamentoCMV(
+        periodo=data.periodo,
+        data_inicio=data.data_inicio,
+        data_fim=data.data_fim,
+        estoque_inicial=data.estoque_inicial,
+        compras=data.compras,
+        estoque_final=data.estoque_final,
+        cmv_real=round(cmv_real, 2),
+        vendas_total=round(vendas_total, 2),
+        cmv_teorico=round(cmv_teorico, 2),
+        cmv_real_pct=round(cmv_real_pct, 2),
+        cmv_teorico_pct=round(cmv_teorico_pct, 2),
+        desvio=round(desvio, 2),
+        desvio_pct=round(desvio_pct, 2),
+        observacoes=data.observacoes,
+    ).model_dump()
+    await db.cmv.insert_one(obj.copy())
+    return obj
+
+
+@api_router.delete("/cmv/{cmv_id}")
+async def delete_cmv(cmv_id: str):
+    r = await db.cmv.delete_one({"id": cmv_id})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "Fechamento não encontrado")
+    return {"ok": True}
+
+
+# ============ DASHBOARD ============
+
+@api_router.get("/dashboard/kpis")
+async def dashboard_kpis():
+    insumos = await db.insumos.find({}, {"_id": 0}).to_list(2000)
+    fichas = await db.fichas.find({}, {"_id": 0}).to_list(2000)
+    vendas = await db.vendas.find({}, {"_id": 0}).to_list(5000)
+    perdas = await db.perdas.find({}, {"_id": 0}).to_list(5000)
+
+    total_insumos = len(insumos)
+    alertas_estoque = sum(1 for i in insumos if float(i.get("estoque_atual") or 0) <= float(i.get("estoque_minimo") or 0) and float(i.get("estoque_minimo") or 0) > 0)
+    total_fichas = sum(1 for f in fichas if not f.get("eh_sub_receita"))
+    total_sub_receitas = sum(1 for f in fichas if f.get("eh_sub_receita"))
+    receita_total = sum(float(v.get("total") or 0) for v in vendas)
+    custo_total_vendas = sum(float(v.get("custo_unitario") or 0) * int(v.get("quantidade") or 0) for v in vendas)
+    lucro_bruto = receita_total - custo_total_vendas
+    qtd_vendas = sum(int(v.get("quantidade") or 0) for v in vendas)
+    ticket_medio = (receita_total / len(vendas)) if vendas else 0.0
+    margem_bruta_pct = (lucro_bruto / receita_total * 100) if receita_total > 0 else 0.0
+    perdas_total = sum(float(p.get("custo_total") or 0) for p in perdas)
+
+    # ponto de equilíbrio simplificado: custos fixos estimados = perdas + 30% receita (placeholder)
+    # usamos: soma dos custos variáveis pct médio
+    return {
+        "total_insumos": total_insumos,
+        "alertas_estoque": alertas_estoque,
+        "total_fichas": total_fichas,
+        "total_sub_receitas": total_sub_receitas,
+        "receita_total": round(receita_total, 2),
+        "custo_total_vendas": round(custo_total_vendas, 2),
+        "lucro_bruto": round(lucro_bruto, 2),
+        "ticket_medio": round(ticket_medio, 2),
+        "qtd_vendas": qtd_vendas,
+        "margem_bruta_pct": round(margem_bruta_pct, 2),
+        "perdas_total": round(perdas_total, 2),
+    }
+
+
+@api_router.get("/dashboard/vendas-por-ficha")
+async def vendas_por_ficha():
+    vendas = await db.vendas.find({}, {"_id": 0}).to_list(10000)
+    agg: dict = {}
+    for v in vendas:
+        fid = v.get("ficha_id")
+        if not fid:
+            continue
+        if fid not in agg:
+            agg[fid] = {"ficha_id": fid, "nome": v.get("ficha_nome", ""), "quantidade": 0, "receita": 0.0, "custo": 0.0}
+        agg[fid]["quantidade"] += int(v.get("quantidade") or 0)
+        agg[fid]["receita"] += float(v.get("total") or 0)
+        agg[fid]["custo"] += float(v.get("custo_unitario") or 0) * int(v.get("quantidade") or 0)
+    result = list(agg.values())
+    for r in result:
+        r["lucro"] = round(r["receita"] - r["custo"], 2)
+        r["margem_pct"] = round((r["lucro"] / r["receita"] * 100), 2) if r["receita"] > 0 else 0.0
+        r["receita"] = round(r["receita"], 2)
+        r["custo"] = round(r["custo"], 2)
+    result.sort(key=lambda x: x["receita"], reverse=True)
+    return result
+
+
+@api_router.get("/dashboard/bcg")
+async def bcg_matrix():
+    """Classifica pratos em Estrela/Burro de Carga/Quebra-cabeça/Cão pela popularidade (qtd) vs margem (%)."""
+    vendas = await db.vendas.find({}, {"_id": 0}).to_list(10000)
+    agg: dict = {}
+    for v in vendas:
+        fid = v.get("ficha_id")
+        if not fid:
+            continue
+        if fid not in agg:
+            agg[fid] = {"ficha_id": fid, "nome": v.get("ficha_nome", ""), "quantidade": 0, "receita": 0.0, "custo": 0.0}
+        agg[fid]["quantidade"] += int(v.get("quantidade") or 0)
+        agg[fid]["receita"] += float(v.get("total") or 0)
+        agg[fid]["custo"] += float(v.get("custo_unitario") or 0) * int(v.get("quantidade") or 0)
+    items = list(agg.values())
+    if not items:
+        return []
+    qtd_media = sum(i["quantidade"] for i in items) / len(items)
+    for i in items:
+        i["lucro"] = i["receita"] - i["custo"]
+        i["margem_pct"] = (i["lucro"] / i["receita"] * 100) if i["receita"] > 0 else 0.0
+    margem_media = sum(i["margem_pct"] for i in items) / len(items)
+    for i in items:
+        popular = i["quantidade"] >= qtd_media
+        lucrativo = i["margem_pct"] >= margem_media
+        if popular and lucrativo:
+            i["classe"] = "Estrela"
+        elif popular and not lucrativo:
+            i["classe"] = "Burro de Carga"
+        elif not popular and lucrativo:
+            i["classe"] = "Quebra-cabeça"
+        else:
+            i["classe"] = "Cão"
+        i["popularidade"] = i["quantidade"]
+        i["rentabilidade"] = round(i["margem_pct"], 2)
+        i["receita"] = round(i["receita"], 2)
+        i["lucro"] = round(i["lucro"], 2)
+    return {"qtd_media": round(qtd_media, 2), "margem_media": round(margem_media, 2), "items": items}
+
+
+@api_router.get("/dashboard/curva-abc")
+async def curva_abc():
+    """Curva ABC dos insumos por valor usado (estoque_atual * custo_por_unidade_uso)."""
+    insumos = await db.insumos.find({}, {"_id": 0}).to_list(2000)
+    items = []
+    for i in insumos:
+        valor = float(i.get("estoque_atual") or 0) * float(i.get("custo_por_unidade_uso") or 0)
+        items.append({"nome": i.get("nome", ""), "valor": round(valor, 2), "estoque": i.get("estoque_atual", 0), "unidade": i.get("unidade_uso", "")})
+    items.sort(key=lambda x: x["valor"], reverse=True)
+    total = sum(i["valor"] for i in items) or 1
+    acc = 0.0
+    for i in items:
+        acc += i["valor"]
+        pct = (acc / total) * 100
+        i["acumulado_pct"] = round(pct, 2)
+        if pct <= 80:
+            i["classe"] = "A"
+        elif pct <= 95:
+            i["classe"] = "B"
+        else:
+            i["classe"] = "C"
+    return items
+
+
+@api_router.get("/")
+async def root():
+    return {"app": "MISE MANAGER", "status": "ok"}
+
+
+app.include_router(api_router)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    client.close()

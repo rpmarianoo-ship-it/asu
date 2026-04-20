@@ -1,0 +1,182 @@
+import { useCallback, useEffect, useState } from "react";
+import { api, fmtBRL, fmtPct } from "@/lib/api";
+import PageHeader from "@/components/PageHeader";
+import KpiCard from "@/components/KpiCard";
+import {
+    FaChartPie,
+    FaSackDollar,
+    FaBoxesStacked,
+    FaReceipt,
+    FaTriangleExclamation,
+    FaChartLine,
+    FaDivide,
+    FaPercent,
+} from "react-icons/fa6";
+import {
+    Chart as ChartJS,
+    CategoryScale, LinearScale, BarElement, LineElement, PointElement,
+    ArcElement, Tooltip, Legend, Filler,
+} from "chart.js";
+import { Bar, Line, Doughnut } from "react-chartjs-2";
+
+ChartJS.register(
+    CategoryScale, LinearScale, BarElement, LineElement, PointElement,
+    ArcElement, Tooltip, Legend, Filler
+);
+
+const abcColor = (classe) => {
+    if (classe === "A") return "#1e293b";
+    if (classe === "B") return "#3b82f6";
+    return "#94a3b8";
+};
+
+const Dashboard = () => {
+    const [kpis, setKpis] = useState(null);
+    const [vpf, setVpf] = useState([]);
+    const [abc, setAbc] = useState([]);
+
+    const load = useCallback(async () => {
+        const [k, v, a] = await Promise.all([
+            api.get("/dashboard/kpis"),
+            api.get("/dashboard/vendas-por-ficha"),
+            api.get("/dashboard/curva-abc"),
+        ]);
+        setKpis(k.data);
+        setVpf(v.data);
+        setAbc(a.data);
+    }, []);
+
+    useEffect(() => { load(); }, [load]);
+
+    const top = vpf.slice(0, 7);
+    const paretoData = {
+        labels: top.map((t) => t.nome),
+        datasets: [
+            {
+                type: "bar",
+                label: "Receita (R$)",
+                data: top.map((t) => t.receita),
+                backgroundColor: "#1e40af",
+                borderRadius: 4,
+            },
+        ],
+    };
+
+    let acc = 0;
+    const totalReceita = vpf.reduce((s, v) => s + v.receita, 0) || 1;
+    const paretoLineData = top.map((t) => {
+        acc += t.receita;
+        return (acc / totalReceita) * 100;
+    });
+    paretoData.datasets.push({
+        type: "line",
+        label: "% Acumulado",
+        data: paretoLineData,
+        borderColor: "#ef4444",
+        backgroundColor: "#ef4444",
+        yAxisID: "y1",
+        tension: 0.35,
+        pointRadius: 4,
+    });
+
+    const abcTop = abc.slice(0, 10);
+    const abcData = {
+        labels: abcTop.map((i) => i.nome),
+        datasets: [{
+            label: "Valor em estoque (R$)",
+            data: abcTop.map((i) => i.valor),
+            backgroundColor: abcTop.map((i) => abcColor(i.classe)),
+            borderRadius: 4,
+        }],
+    };
+
+    // Ponto de equilíbrio simplificado: custos fixos estimados 30% receita média
+    const receita = kpis?.receita_total || 0;
+    const custoVar = kpis?.custo_total_vendas || 0;
+    const custoFixo = receita * 0.25; // estimativa
+    const pe = (1 - custoVar / (receita || 1)) > 0 ? custoFixo / (1 - custoVar / (receita || 1)) : 0;
+
+    const donutData = {
+        labels: ["Custo Variável", "Lucro Bruto", "Perdas"],
+        datasets: [{
+            data: [kpis?.custo_total_vendas || 0, kpis?.lucro_bruto || 0, kpis?.perdas_total || 0],
+            backgroundColor: ["#0f172a", "#10b981", "#ef4444"],
+            borderWidth: 0,
+        }],
+    };
+
+    const chartOpts = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: "bottom", labels: { font: { size: 11 } } } },
+        scales: {
+            x: { ticks: { font: { size: 10 } }, grid: { display: false } },
+            y: { ticks: { font: { size: 10 } }, grid: { color: "#f1f5f9" } },
+            y1: { position: "right", min: 0, max: 100, ticks: { font: { size: 10 }, callback: (v) => v + "%" }, grid: { display: false } },
+        },
+    };
+
+    const donutOpts = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { font: { size: 11 } } } } };
+
+    return (
+        <div className="p-4 sm:p-6 lg:p-10 max-w-[1600px] mx-auto">
+            <PageHeader
+                title="Dashboard Operacional"
+                subtitle="Visão consolidada de vendas, custos e rentabilidade"
+                icon={FaChartPie}
+            />
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+                <KpiCard label="Receita Total" value={fmtBRL(kpis?.receita_total)} icon={FaSackDollar} accent="slate" testid="kpi-receita" />
+                <KpiCard label="Lucro Bruto" value={fmtBRL(kpis?.lucro_bruto)} hint={fmtPct(kpis?.margem_bruta_pct) + " margem"} icon={FaChartLine} accent="green" testid="kpi-lucro" />
+                <KpiCard label="Ticket Médio" value={fmtBRL(kpis?.ticket_medio)} icon={FaReceipt} accent="blue" testid="kpi-ticket" />
+                <KpiCard label="Itens Vendidos" value={kpis?.qtd_vendas || 0} icon={FaPercent} accent="slate" testid="kpi-itens" />
+                <KpiCard label="Ponto de Equilíbrio" value={fmtBRL(pe)} hint="Estimativa (25% fixo)" icon={FaDivide} accent="blue" testid="kpi-pe" />
+                <KpiCard label="Insumos Cadastrados" value={kpis?.total_insumos || 0} hint={`${kpis?.alertas_estoque || 0} alerta(s)`} icon={FaBoxesStacked} accent="amber" testid="kpi-insumos" />
+                <KpiCard label="Fichas Técnicas" value={kpis?.total_fichas || 0} hint={`${kpis?.total_sub_receitas || 0} sub-receitas`} icon={FaChartPie} accent="slate" testid="kpi-fichas" />
+                <KpiCard label="Perdas Acumuladas" value={fmtBRL(kpis?.perdas_total)} icon={FaTriangleExclamation} accent="red" testid="kpi-perdas" />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+                <div className="bg-white border border-slate-200 rounded-lg p-5 lg:col-span-2">
+                    <div className="flex items-center justify-between mb-4">
+                        <div>
+                            <div className="text-xs uppercase tracking-widest font-semibold text-slate-500">Pareto de Vendas</div>
+                            <h3 className="font-display font-bold text-lg text-slate-900">Top 7 Pratos por Receita</h3>
+                        </div>
+                    </div>
+                    <div className="h-72">
+                        {top.length > 0 ? <Bar data={paretoData} options={chartOpts} /> : <EmptyChart />}
+                    </div>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-lg p-5">
+                    <div className="mb-4">
+                        <div className="text-xs uppercase tracking-widest font-semibold text-slate-500">Composição</div>
+                        <h3 className="font-display font-bold text-lg text-slate-900">Custo × Lucro × Perdas</h3>
+                    </div>
+                    <div className="h-72">
+                        {(kpis?.receita_total || 0) > 0 ? <Doughnut data={donutData} options={donutOpts} /> : <EmptyChart />}
+                    </div>
+                </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-lg p-5">
+                <div className="mb-4">
+                    <div className="text-xs uppercase tracking-widest font-semibold text-slate-500">Curva ABC</div>
+                    <h3 className="font-display font-bold text-lg text-slate-900">Valor em Estoque por Insumo</h3>
+                </div>
+                <div className="h-72">
+                    {abcTop.length > 0 ? <Bar data={abcData} options={{ ...chartOpts, scales: { x: chartOpts.scales.x, y: chartOpts.scales.y } }} /> : <EmptyChart />}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const EmptyChart = () => (
+    <div className="h-full flex items-center justify-center text-sm text-slate-400">
+        Sem dados suficientes. Cadastre insumos, fichas e vendas para ver os gráficos.
+    </div>
+);
+
+export default Dashboard;
